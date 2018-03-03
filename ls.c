@@ -21,6 +21,7 @@
 
 void l();
 char * parse_mode(mode_t st_mode);
+char * get_username(uid_t st_uid);
 
 int main(int argc, char **argv){
 	
@@ -28,7 +29,6 @@ int main(int argc, char **argv){
 	DIR *dp;
 	struct dirent *dentry;
 	struct stat sbuff;
-	struct passwd *pwentry;
 	char cwd[BUFFSIZE];
 	char slinkbuff[BUFFSIZE];
 	
@@ -52,12 +52,9 @@ int main(int argc, char **argv){
 			perror("lstat failed");
 			exit(1);
 		}
-		if((pwentry = getpwuid(sbuff.st_uid)) == NULL){
-			perror("getpwuid failed");
-			exit(1);
-		}
+		char *username = get_username(sbuff.st_uid);
 		char *mode = parse_mode(sbuff.st_mode);
-		printf("%-11s", mode);
+		printf("%-11s%-20s", mode, username);
 		if(S_ISLNK(sbuff.st_mode)){
 			int n;	
 			if((n = readlink(dentry->d_name, slinkbuff, BUFFSIZE)) < 0){
@@ -68,7 +65,7 @@ int main(int argc, char **argv){
 			slinkbuff[n] = '\0';
 			printf("%s -> %s\n", dentry->d_name, slinkbuff);
 		}else{
-			printf("%s  User:  %s\n", dentry->d_name, pwentry->pw_name);
+			printf("%s  User:  %s\n", dentry->d_name, username);
 		}
 	}
 	
@@ -223,4 +220,16 @@ char * parse_mode(mode_t st_mode){
 
 		
 	return mode;
+}
+
+char * get_username(uid_t st_uid){
+	
+	struct passwd *pwentry;
+
+	if((pwentry = getpwuid(st_uid)) == NULL){
+                        perror("getpwuid failed");
+                        exit(1);
+        }
+
+	return pwentry->pw_name;
 }

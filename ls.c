@@ -5,6 +5,9 @@
 #include <dirent.h>
 #include <pwd.h>
 #include <sys/stat.h>
+#include <grp.h>
+#include <sys/types.h>
+#include <time.h>
 
 #define NELEMS(x) sizeof(x)/sizeof((x)[0])
 #define RED     "\x1b[31m"
@@ -22,16 +25,18 @@
 void l();
 char * parse_mode(mode_t st_mode);
 char * get_username(uid_t st_uid);
+char * get_groupname(gid_t st_gid);
 
 int main(int argc, char **argv){
 	
 	int fd;
+	struct tm *time;
 	DIR *dp;
 	struct dirent *dentry;
 	struct stat sbuff;
 	char cwd[BUFFSIZE];
 	char slinkbuff[BUFFSIZE];
-	
+	char timebuff[BUFFSIZE];
 
 	if(getcwd(cwd, BUFFSIZE) == NULL){
 		perror("getcwd failed");
@@ -52,9 +57,14 @@ int main(int argc, char **argv){
 			perror("lstat failed");
 			exit(1);
 		}
+		time = localtime(&sbuff.st_mtim.tv_sec);
+		strftime(timebuff, BUFFSIZE, "%3b %d %H:%M", time);
+		nlink_t nlinks = sbuff.st_nlink;
+		off_t size = sbuff.st_size;
 		char *username = get_username(sbuff.st_uid);
 		char *mode = parse_mode(sbuff.st_mode);
-		printf("%-11s%-20s", mode, username);
+		char *groupname = get_groupname(sbuff.st_gid);
+		printf("%-11s%2d %-9s%-9s%10lld %s %-20s\n", mode, nlinks, username, groupname, size, timebuff, dentry->d_name);
 		if(S_ISLNK(sbuff.st_mode)){
 			int n;	
 			if((n = readlink(dentry->d_name, slinkbuff, BUFFSIZE)) < 0){
@@ -64,8 +74,6 @@ int main(int argc, char **argv){
 			
 			slinkbuff[n] = '\0';
 			printf("%s -> %s\n", dentry->d_name, slinkbuff);
-		}else{
-			printf("%s  User:  %s\n", dentry->d_name, username);
 		}
 	}
 	
@@ -78,56 +86,7 @@ int main(int argc, char **argv){
 
 	return EXIT_SUCCESS;
 }
-
-void l(){
-	int fd;
-        DIR *dp;
-        struct dirent *dentry;
-        struct stat sbuff;
-        struct passwd *pwentry;
-        char cwd[BUFFSIZE];
-        char slinkbuff[BUFFSIZE];
-
-
-        if(getcwd(cwd, BUFFSIZE) == NULL){
-                perror("getcwd failed");
-                exit(1);
-        }
-
-        printf("cwd: %s\n", cwd);
-
-        if((dp = opendir(cwd)) == NULL){
-                perror("Can not open directory");
-                exit(1);
-        }
-
-	while((dentry = readdir(dp)) != NULL){
-                if(lstat(dentry->d_name, &sbuff) < 0){
-                        perror("lstat failed");
-                        exit(1);
-                }
-                if((pwentry = getpwuid(sbuff.st_uid)) == NULL){
-                        perror("getpwuid failed");
-                        exit(1);
-                }
-
-		char *mode = parse_mode(sbuff.st_mode);
-		
-                if(S_ISLNK(sbuff.st_mode)){
-                        int n;
-                        if((n = readlink(dentry->d_name, slinkbuff, BUFFSIZE)) < 0){
-                                perror("readlink failed");
-                                exit(1);
-                        }
-
-                        slinkbuff[n] = '\0';
-                        printf("%s -> %s\n", dentry->d_name, slinkbuff);
-                }else{
-			
-                        printf("%s  User:  %s\n", dentry->d_name, pwentry->pw_name);
-                }
-        }
-}
+        
 
 char * parse_mode(mode_t st_mode){
 
@@ -232,4 +191,18 @@ char * get_username(uid_t st_uid){
         }
 
 	return pwentry->pw_name;
+}
+
+char * get_groupname(gid_t st_gid){
+
+	struct group *grentry;
+	
+	if((grentry = getgrgid(st_gid)) == NULL){
+                        perror("getgrgid failed");
+                        exit(1);
+        }
+
+        return grentry->gr_name;
+
+
 }

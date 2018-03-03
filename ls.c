@@ -28,7 +28,7 @@ char * get_username(uid_t st_uid);
 char * get_groupname(gid_t st_gid);
 
 int main(int argc, char **argv){
-	
+	long long nblocks = 0;
 	int fd;
 	struct tm *time;
 	DIR *dp;
@@ -43,20 +43,31 @@ int main(int argc, char **argv){
 		exit(1);
 	}
 	
-	printf("cwd: %s\n", cwd);
+	//printf("cwd: %s\n", cwd);
 	
 	if((dp = opendir(cwd)) == NULL){
 		perror("Can not open directory");
 		exit(1);
 	}
 
+	while((dentry = readdir(dp))!= NULL){
 	
+		if(lstat(dentry->d_name, &sbuff) < 0){
+                        perror("lstat failed");
+                        exit(1);
+                }
+		nblocks += sbuff.st_blocks;
+	}
+	
+	printf("total %lld\n", nblocks);
+	rewinddir(dp);
 
 	while((dentry = readdir(dp)) != NULL){
 		if(lstat(dentry->d_name, &sbuff) < 0){
 			perror("lstat failed");
 			exit(1);
 		}
+		 
 		time = localtime(&sbuff.st_mtim.tv_sec);
 		strftime(timebuff, BUFFSIZE, "%3b %d %H:%M", time);
 		nlink_t nlinks = sbuff.st_nlink;
@@ -76,13 +87,13 @@ int main(int argc, char **argv){
 			printf("%s -> %s\n", dentry->d_name, slinkbuff);
 		}
 	}
-	
-	if((fd = open(argv[1], O_RDWR)) < 0){
+		
+	/*if((fd = open(argv[1], O_RDWR)) < 0){
 		perror("Unable to open the file!");
 		exit(1);
 	} 
 
-	lseek(fd, 0, SEEK_SET);	
+	lseek(fd, 0, SEEK_SET);*/	
 
 	return EXIT_SUCCESS;
 }

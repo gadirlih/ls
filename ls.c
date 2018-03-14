@@ -88,7 +88,7 @@ int main(int argc, char **argv){
 
 
 
-frecord * get_frecords(char *path, maxLen *max_length, bool single_file){
+frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[], ncmd *ncom){
 	long nentry = 0;
 	frecord *records;
 	long long nblocks = 0;
@@ -103,7 +103,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool single_file){
 	bool next_dir = false;
 	
 		
-	if(!single_file){
+	if(!isFile){
 		if(chdir(path) < 0){
 			perror("chdir failed");
 			exit(1);
@@ -134,10 +134,10 @@ frecord * get_frecords(char *path, maxLen *max_length, bool single_file){
 		rewinddir(dp);
 	}
 	
-	if(!single_file) {
+	if(!isFile) {
 		records = malloc(nentry * sizeof(frecord)); 	//allocate memory for records
 	}else{
-		records = malloc(1 * sizeof(frecord));		//allocate mem for 1 file
+		records = malloc((ncom->nFiles) * sizeof(frecord));		//allocate mem for 1 file
 	}
 
 	int max = 0;
@@ -149,16 +149,22 @@ frecord * get_frecords(char *path, maxLen *max_length, bool single_file){
 	int gid_max_len = 0;
 	nentry = 0;
 
-	if(!single_file){
+	if(!isFile){
 		if((dentry = readdir(dp)) != NULL){
 			next_dir = true;
 		}
 	}
-	while(single_file || next_dir){
+	int f = 0;
+	int file_count = 0;
+	if(files != NULL){
+		file_count = ncom->nFiles;
+	}
+	
+	while(isFile || next_dir){
 		
 		
-		if(single_file){
-			if(lstat(path, &sbuff) < 0){
+		if(isFile){
+			if(lstat(files[f], &sbuff) < 0){
                         	perror("lstat1 failed");
                         	exit(1);
 			}
@@ -181,19 +187,19 @@ frecord * get_frecords(char *path, maxLen *max_length, bool single_file){
 		strcpy(records[nentry].mode, mode);
 		char *groupname = get_groupname(sbuff.st_gid);
 		strcpy(records[nentry].groupname, groupname);
-		if(!single_file){
+		if(!isFile){
 			strcpy(records[nentry].name, dentry->d_name);
 		}else{
-			strcpy(records[nentry].name, path);
+			strcpy(records[nentry].name, files[f]);
 		}
 		records[nentry].uid = sbuff.st_uid;
 		records[nentry].gid = sbuff.st_gid;
 		if(S_ISLNK(sbuff.st_mode)){
                         int n;
-                        if(!single_file && ((n = readlink(dentry->d_name, slinkbuff, BUFFSIZE)) < 0)){
+                        if(!isFile && ((n = readlink(dentry->d_name, slinkbuff, BUFFSIZE)) < 0)){
                                 perror("readlink1 failed");
                                 exit(1);
-                        }else if(single_file && ((n = readlink(path, slinkbuff, BUFFSIZE)) < 0)){
+                        }else if(isFile && ((n = readlink(files[f], slinkbuff, BUFFSIZE)) < 0)){
                                 perror("readlink2 failed");
                                 exit(1);
 			}	
@@ -226,16 +232,22 @@ frecord * get_frecords(char *path, maxLen *max_length, bool single_file){
                         gid_max_len = len;
                 }
 
-		if(!single_file){
+		if(!isFile){
                 	if((dentry = readdir(dp)) != NULL){
                         	next_dir = true;
                 	}else{
 				next_dir = false;
 			}
         	}
-
+		if(isFile){
+			f++;
+			if(f == file_count){
+				 isFile = false;
+			}
+		}
+		
 		nentry++;
-		single_file = false;
+		
 	}
 	max_length->lEntries = nentry;
 	max_length->lName = max;
@@ -282,16 +294,20 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
         char cwd[BUFFSIZE];
         maxLen maxlen;
 	
-        for(int i = 0; i < ncom.nFiles; i++){
+        
 
-                frecord *records = get_frecords(files[i], &maxlen, true);
-                num_entries = maxlen.lEntries;
+        if(files != NULL){
+		
+		frecord *records = get_frecords(NULL, &maxlen, true, files, &ncom);
+        	num_entries = maxlen.lEntries;
 
-                for(long nentry = 0; nentry < num_entries; nentry++){
-                printf("%-10s %*d %-*s %-*s %*lld %s %-*s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].time, maxlen.lName, records[nentry].name);
-                }
-                //if(i + 1 != ncom.nFiles) printf("\n");
-        }
+        	for(long nentry = 0; nentry < num_entries; nentry++){
+        	
+			printf("%-10s %*d %-*s %-*s %*lld %s %-*s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].time, maxlen.lName, records[nentry].name);
+        
+		}
+		if(dirs != NULL) printf("\n");
+        }        
 
 	//frecord *records = get_frecords(files[0], &maxlen, true);
 
@@ -304,7 +320,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
         for(int i = 0; i < ncom.nDirs; i++){
                 
                 printf("%s:\n", dirs[i]);
-                frecord *records = get_frecords(dirs[i], &maxlen, false);
+                frecord *records = get_frecords(dirs[i], &maxlen, false, NULL, NULL);
                 num_entries = maxlen.lEntries;
 
                 //print_default(records, &maxlen);

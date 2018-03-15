@@ -74,6 +74,7 @@ typedef struct{
 	bool SORT_ABC;
 	bool LONG_UID;
 	bool NAME_SLINK;
+	bool UPPER_A;
 }argFlags;
 
 frecord * get_frecords();
@@ -89,7 +90,7 @@ void get_arguments();
 frecord *no_dot_records();
 maxLen maxlength();
 
-argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false};
+argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false};
 
 int main(int argc, char **argv){
 	char *files[BUFFSIZE];
@@ -98,6 +99,11 @@ int main(int argc, char **argv){
 	ncmd ncom;
 	
 	ncom = parse_command(files, dirs, args, argc, argv);
+	if(ncom.nFiles == 0 && ncom.nDirs == 0){
+		char def[1] = {'.'};
+		dirs[0] = def;
+		ncom.nDirs = 1;
+	}
 	
 	print_result(files, dirs, args, ncom);
 
@@ -453,21 +459,56 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
               
 		if(flag.PRINT_LONG && !flag.LONG_UID){
 			printf("Total %ld\n", maxlen.lTotal);
-                	for(long nentry = 0; nentry < num_entries; nentry++){
-                		printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].time, records[nentry].name);
+        
+	        	for(long nentry = 0; nentry < num_entries; nentry++){
+				
+				int s1 = strcmp(records[nentry].name, ".");
+				int s2 = strcmp(records[nentry].name, "..");
+
+				if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue; 
+                		
+				printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].time, records[nentry].name);
                 	}
                 	if(i + 1 != ncom.nDirs) printf("\n");
 		}
 
 		if(flag.PRINT_LONG && flag.LONG_UID){
                         printf("Total %ld\n", maxlen.lTotal);
-                        for(long nentry = 0; nentry < num_entries; nentry++){
-                                printf("%-10s %*d %*d %*d %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid, maxlen.lSize, records[nentry].size, records[nentry].time, records[nentry].name);
+        
+	                for(long nentry = 0; nentry < num_entries; nentry++){
+                                
+				int s1 = strcmp(records[nentry].name, ".");
+                                int s2 = strcmp(records[nentry].name, "..");
+
+                                if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue;
+
+				printf("%-10s %*d %*d %*d %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid, maxlen.lSize, records[nentry].size, records[nentry].time, records[nentry].name);
                         }
                         if(i + 1 != ncom.nDirs) printf("\n");
                 }
 		if(flag.PRINT_SIMPLE){
-			print_default(records, &maxlen);
+			if(flag.UPPER_A){
+				frecord *recA;
+				recA = malloc(maxlen.lEntries * sizeof(frecord));   
+				int f = 0;
+				int s1, s2;
+				maxLen maxt;
+				for(int i = 0; i < maxlen.lEntries; i++){
+					
+					s1 = strcmp(records[i].name, ".");
+                                	s2 = strcmp(records[i].name, "..");
+
+                                	if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue;
+					
+					recA[f] =  records[i];
+					f++;
+				}
+				maxt = maxlen;
+				maxt.lEntries -= 2;
+				print_default(recA, &maxt);
+			}else{
+				print_default(records, &maxlen);
+			}
 			if(i + 1 != ncom.nDirs) printf("\n");
 		}
 
@@ -479,16 +520,20 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 void parse_arguments(char *args, ncmd ncom){
 	
 	int a = 0;
+	bool disable_A = false;
 	
 	while(a < ncom.nArgs){
 		
 		switch(args[a]){
 			
 			case 'A' :
-				flag.HIDDEN_FILES = false;
+				if(!disable_A) flag.UPPER_A = true;
+				flag.HIDDEN_FILES = true;
 				break;
 			case 'a' :
 				flag.HIDDEN_FILES = true;
+				flag.UPPER_A = false;
+				disable_A = true;
 				break;
 			case 'l' :
 				flag.PRINT_LONG = true;
@@ -508,6 +553,8 @@ void parse_arguments(char *args, ncmd ncom){
 				flag.SORT_ABC = false;
 				flag.HIDDEN_FILES = true;
 				flag.PRINT_SIMPLE = true;
+				flag.UPPER_A = false;
+				disable_A = true;
 				break;
 			default : 
 				printf("WRONG ARGUMENT\n");
@@ -529,16 +576,17 @@ void print_default(frecord *records, maxLen *maxlen){
         int cols = width / col_width;
         int rows = (n + cols - 1) / cols;
 
+
         for(int r = 0; r < rows; r++){
                 for(int c = 0; c < cols; c++){
-
+			
                         int index = c * rows + r;
                         if(index >= n) continue;
                         //index = id[index];
 
                         int len = strlen(records[index].nslname);
                         int tabs_needed = (col_width - len + TABSIZE - 1) / TABSIZE;
-
+			
                         printf("%s", records[index].nslname);
                         while(tabs_needed--) putchar('\t');
                 }

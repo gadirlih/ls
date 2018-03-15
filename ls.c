@@ -116,7 +116,7 @@ maxLen maxlength(frecord *records, long ent){
         int uid_max_len = 0;
         int gid_max_len = 0;
         int nentry = 0;
-	long total;
+	long total = 0;
 	
 	while(nentry != ent){
 		
@@ -176,7 +176,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	char timebuff[BUFFSIZE];
 	char cwd[BUFFSIZE];
 	bool next_dir = false;
-	
+	long lTotal = 0;
 		
 	if(!isFile){
 		if(chdir(path) < 0){
@@ -201,8 +201,10 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
                        		perror("lstat1 failed");
                        		exit(1);
                 	}
+			lTotal += sbuff.st_blocks;
 			nentry++;
 		}
+		max_length->lTotal = lTotal;
 	
 		rewinddir(dp);
 	}
@@ -447,11 +449,8 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                 	num_entries = maxlen.lEntries;
         	}
 
-       		if(flag.SORT_ABC) qsort(records, num_entries, sizeof(frecord), cmp_str);
-
-	
-		if(flag.PRINT_LONG)printf("Total %ld\n", maxlen.lTotal);
-                
+       		if(flag.SORT_ABC) qsort(records, num_entries, sizeof(frecord), cmp_str);	
+              
 		if(flag.PRINT_LONG && !flag.LONG_UID){
 			printf("Total %ld\n", maxlen.lTotal);
                 	for(long nentry = 0; nentry < num_entries; nentry++){
@@ -459,6 +458,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                 	}
                 	if(i + 1 != ncom.nDirs) printf("\n");
 		}
+
 		if(flag.PRINT_LONG && flag.LONG_UID){
                         printf("Total %ld\n", maxlen.lTotal);
                         for(long nentry = 0; nentry < num_entries; nentry++){
@@ -468,6 +468,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                 }
 		if(flag.PRINT_SIMPLE){
 			print_default(records, &maxlen);
+			if(i + 1 != ncom.nDirs) printf("\n");
 		}
 
                 chdir("..");
@@ -488,6 +489,25 @@ void parse_arguments(char *args, ncmd ncom){
 				break;
 			case 'a' :
 				flag.HIDDEN_FILES = true;
+				break;
+			case 'l' :
+				flag.PRINT_LONG = true;
+				flag.NAME_SLINK = true;
+				flag.LONG_UID = false;
+				flag.PRINT_SIMPLE = false;
+				break;
+			case 'n' :
+				flag.PRINT_LONG = true;
+				flag.NAME_SLINK = true;
+				flag.LONG_UID = true;
+				flag.PRINT_SIMPLE = false;
+				break;
+			case 'f' :
+				flag.PRINT_LONG = false;
+				flag.NAME_SLINK = false;
+				flag.SORT_ABC = false;
+				flag.HIDDEN_FILES = true;
+				flag.PRINT_SIMPLE = true;
 				break;
 			default : 
 				printf("WRONG ARGUMENT\n");

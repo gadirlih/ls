@@ -12,6 +12,7 @@
 #include <math.h>
 #include <sys/ioctl.h>
 #include <ctype.h>
+#include <locale.h>
 
 #define NELEMS(x) sizeof(x)/sizeof((x)[0])
 #define RED     "\x1b[31m"
@@ -87,6 +88,8 @@ typedef struct{
 	bool LAST_ACC;
 	bool LAST_CHANGE;
 	bool SORT_TIME;
+	bool SORT_SIZE;
+	bool SORT_ABC_DIR;
 }argFlags;
 
 frecord * get_frecords();
@@ -104,7 +107,7 @@ maxLen maxlength();
 char * get_time_string();
 char * get_month();
 
-argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false, .SORT_TIME = false};
+argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false, .SORT_TIME = false, .SORT_SIZE = false, .SORT_ABC_DIR = true};
 
 int main(int argc, char **argv){
 	char *files[BUFFSIZE];
@@ -118,7 +121,9 @@ int main(int argc, char **argv){
 		dirs[0] = def;
 		ncom.nDirs = 1;
 	}
-	
+
+	setlocale(LC_ALL, "en_US.UTF-8");
+
 	print_result(files, dirs, args, ncom);
 
 	return EXIT_SUCCESS;
@@ -435,7 +440,7 @@ int cmp_str(const void *a, const void *b){
 	frecord *l = (frecord *)a;
 	frecord *r = (frecord *)b;
 	
-	if(*(l->name) == '.') tmpl = (l->name) + 1;
+	/*if(*(l->name) == '.') tmpl = (l->name) + 1;
 	else tmpl = l->name;
 	
 	if(*(r->name) == '.') tmpr = (r->name) + 1;
@@ -444,9 +449,9 @@ int cmp_str(const void *a, const void *b){
 	for(;;tmpl++, tmpr++){
 		int res = tolower(*tmpl) - tolower(*tmpr);
 		if(res != 0 || !*tmpl) return res;
-	}
+	}*/
 		 
-	//return strcmp(l->name, r->name);
+	return strcoll(l->name, r->name);
 }
 
 int cmp_dirs(const void *a, const void *b){
@@ -455,7 +460,7 @@ int cmp_dirs(const void *a, const void *b){
         char **l = (char **)a;
 	char **r = (char **)b;
 
-        if(**(l) == '.') tmpl = *(l) + 1;
+        /*if(**(l) == '.') tmpl = *(l) + 1;
         else tmpl = *l;
 
         if(**(r) == '.') tmpr = *(r) + 1;
@@ -464,7 +469,9 @@ int cmp_dirs(const void *a, const void *b){
         for(;;tmpl++, tmpr++){
                 int res = tolower(*tmpl) - tolower(*tmpr);
                 if(res != 0 || !*tmpl) return res;
-        }
+        }*/
+
+	return strcoll(*l, *r);
 }
 
 int cmp_mtime(const void *a, const void *b){
@@ -478,7 +485,7 @@ int cmp_mtime(const void *a, const void *b){
 	
 	if(res == 0){
 		if(nano != 0) return -nano;
-		else return strcmp(l->name, r->name);
+		else return strcoll(l->name, r->name);
 	}else{ 
 		return -res;
 	}
@@ -496,7 +503,7 @@ int cmp_ctime(const void *a, const void *b){
 
         if(res == 0){
                 if(nano != 0) return -nano;
-                else return strcmp(l->name, r->name);
+                else return strcoll(l->name, r->name);
         }else{
                 return -res;
         }
@@ -513,11 +520,23 @@ int cmp_atime(const void *a, const void *b){
 
         if(res == 0){
                 if(nano != 0) return -nano;
-                else return strcmp(l->name, r->name);
+                else return strcoll(l->name, r->name);
         }else{
                 return -res;
         }
 }
+
+int cmp_size(const void *a, const void *b){
+        char *tmpl, *tmpr;
+
+        frecord *l = (frecord *)a;
+        frecord *r = (frecord *)b;
+
+        long long res = l->size - r->size;
+
+        return (res != 0)?-res:(strcoll(l->name, r->name));
+}
+
 
 int cmp_dir_atime(const void *a, const void *b){
         char *tmpl, *tmpr;
@@ -544,7 +563,7 @@ int cmp_dir_atime(const void *a, const void *b){
 
         if(res == 0){
                 if(nano != 0) return -nano;
-                else return strcmp(*l, *r);
+                else return strcoll(*l, *r);
         }else{
                 return -res;
         }
@@ -575,7 +594,7 @@ int cmp_dir_mtime(const void *a, const void *b){
 
         if(res == 0){
                 if(nano != 0) return -nano;
-                else return strcmp(*l, *r);
+                else return strcoll(*l, *r);
         }else{
                 return -res;
         }
@@ -606,7 +625,7 @@ int cmp_dir_ctime(const void *a, const void *b){
 
         if(res == 0){
                 if(nano != 0) return -nano;
-                else return strcmp(*l, *r);
+                else return strcoll(*l, *r);
         }else{
                 return -res;
         }
@@ -655,9 +674,9 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 		if(ncom.nDirs != 0) printf("\n");
         }        
 	
-	if(flag.SORT_ABC){
-		qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dirs);
-	}
+	
+	qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dirs);
+	
 
 	if((flag.SORT_TIME || flag.LAST_ACC || flag.LAST_CHANGE) && !flag.PRINT_LONG){
 		if(flag.LAST_MOD){
@@ -704,6 +723,8 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 			if(flag.LAST_ACC)	qsort(records, num_entries, sizeof(frecord), cmp_atime);
 			if(flag.LAST_CHANGE)	qsort(records, num_entries, sizeof(frecord), cmp_ctime);
 		}
+		
+		if(flag.SORT_SIZE) qsort(records, num_entries, sizeof(frecord), cmp_size);
 		
 		
 		if(flag.PRINT_LONG && !flag.LONG_UID){
@@ -819,6 +840,7 @@ void parse_arguments(char *args, ncmd ncom){
 				flag.PRINT_SIMPLE = true;
 				flag.UPPER_A = false;
 				flag.SORT_TIME = false;
+				flag.SORT_SIZE = false;
 				disable_A = true;
 				break;
 			case 'u' :
@@ -834,6 +856,11 @@ void parse_arguments(char *args, ncmd ncom){
 			case 't' :
 				flag.SORT_TIME = true;
 				flag.SORT_ABC = false;
+				break;
+			case 'S' :
+				flag.SORT_SIZE = true;
+				flag.SORT_ABC = false;
+				flag.SORT_TIME = false;
 				break;
 			default : 
 				printf("WRONG ARGUMENT\n");

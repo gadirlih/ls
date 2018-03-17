@@ -48,6 +48,9 @@ typedef struct{
 	long mtime;
 	long ctime;
 	long atime;
+	long nmtime;
+	long nctime;
+	long natime;
 	char name[BUFFSIZE];
 	char nslname[BUFFSIZE];
 	long blocks;
@@ -186,7 +189,8 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	
 	int fd;
 	struct tm smtime, sctime, satime;
-	long mtime, chtime, atime;
+	long mtime, ctime, atime;
+	long nmtime, nctime, natime;
 	DIR *dp;
 	struct dirent *dentry;
 	struct stat sbuff;
@@ -281,6 +285,11 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 		records[nentry].mtime = sbuff.st_mtim.tv_sec;
 		records[nentry].ctime = sbuff.st_ctim.tv_sec;
 		records[nentry].atime = sbuff.st_atim.tv_sec;
+		
+		records[nentry].nmtime = sbuff.st_mtim.tv_nsec;
+                records[nentry].nctime = sbuff.st_ctim.tv_nsec;
+                records[nentry].natime = sbuff.st_atim.tv_nsec;
+		
 		nlink_t nlinks = sbuff.st_nlink;
 		records[nentry].nlinks = nlinks;
 		off_t size = sbuff.st_size;
@@ -465,8 +474,15 @@ int cmp_mtime(const void *a, const void *b){
         frecord *r = (frecord *)b;
 	
 	long res = l->mtime - r->mtime;
+	long nano = l->nmtime - r->nmtime;
 	
-	return (res != 0)?(-res):0;
+	if(res == 0){
+		if(nano != 0) return -nano;
+		else return strcmp(l->name, r->name);
+	}else{ 
+		return -res;
+	}
+	//return (res != 0)?(-res):0;
 }
 
 int cmp_ctime(const void *a, const void *b){
@@ -476,8 +492,14 @@ int cmp_ctime(const void *a, const void *b){
         frecord *r = (frecord *)b;
 
         long res = l->ctime - r->ctime;
+	long nano = l->nctime - r->nctime;
 
-        return (res != 0)?(-res):0;
+        if(res == 0){
+                if(nano != 0) return -nano;
+                else return strcmp(l->name, r->name);
+        }else{
+                return -res;
+        }
 }
 
 int cmp_atime(const void *a, const void *b){
@@ -487,9 +509,109 @@ int cmp_atime(const void *a, const void *b){
         frecord *r = (frecord *)b;
 
         long res = l->atime - r->atime;
+	long nano = l->natime - r->natime;
 
-        return (res != 0)?(-res):0;
+        if(res == 0){
+                if(nano != 0) return -nano;
+                else return strcmp(l->name, r->name);
+        }else{
+                return -res;
+        }
 }
+
+int cmp_dir_atime(const void *a, const void *b){
+        char *tmpl, *tmpr;
+
+        char **l = (char **)a;
+        char **r = (char **)b;
+
+	struct stat *sbuffl;
+	sbuffl = malloc(sizeof(struct stat));
+	if(lstat(*l, sbuffl) < 0){
+		perror("lstat in cmp_dir_atime failed");
+                exit(1);
+        }
+	
+	struct stat *sbuffr;
+	sbuffr = malloc(sizeof(struct stat));
+        if(lstat(*r, sbuffr) < 0){
+                perror("lstat in cmp_dri_atime failed");
+                exit(1);
+        }
+
+        long res = sbuffl->st_atim.tv_sec - sbuffr->st_atim.tv_sec;
+        long nano = sbuffl->st_atim.tv_nsec - sbuffr->st_atim.tv_nsec;
+
+        if(res == 0){
+                if(nano != 0) return -nano;
+                else return strcmp(*l, *r);
+        }else{
+                return -res;
+        }
+}
+
+int cmp_dir_mtime(const void *a, const void *b){
+        char *tmpl, *tmpr;
+
+        char **l = (char **)a;
+        char **r = (char **)b;
+
+        struct stat *sbuffl;
+	sbuffl = malloc(sizeof(struct stat));
+        if(lstat(*l, sbuffl) < 0){
+                perror("lstat in cmp_dir_mtime failed");
+                exit(1);
+        }
+
+        struct stat *sbuffr;
+	sbuffr = malloc(sizeof(struct stat));
+        if(lstat(*r, sbuffr) < 0){
+                perror("lstat in cmp_dri_mtime failed");
+                exit(1);
+        }
+
+	long res = sbuffl->st_mtim.tv_sec - sbuffr->st_mtim.tv_sec;
+        long nano = sbuffl->st_mtim.tv_nsec - sbuffr->st_mtim.tv_nsec;
+
+        if(res == 0){
+                if(nano != 0) return -nano;
+                else return strcmp(*l, *r);
+        }else{
+                return -res;
+        }
+}
+
+int cmp_dir_ctime(const void *a, const void *b){
+        char *tmpl, *tmpr;
+
+        char **l = (char **)a;
+        char **r = (char **)b;
+
+        struct stat *sbuffl;
+	sbuffl = malloc(sizeof(struct stat));
+        if(lstat(*l, sbuffl) < 0){
+                perror("lstat in cmp_dir_ctime failed");
+                exit(1);
+        }
+
+        struct stat *sbuffr;
+	sbuffr = malloc(sizeof(struct stat));
+        if(lstat(*r, sbuffr) < 0){
+                perror("lstat in cmp_dri_ctime failed");
+                exit(1);
+        }
+
+	long res = sbuffl->st_ctim.tv_sec - sbuffr->st_ctim.tv_sec;
+        long nano = sbuffl->st_ctim.tv_nsec - sbuffr->st_ctim.tv_nsec;
+
+        if(res == 0){
+                if(nano != 0) return -nano;
+                else return strcmp(*l, *r);
+        }else{
+                return -res;
+        }
+}
+
 
 
 frecord *no_dot_records(frecord *records, long recent, maxLen *maxlen){
@@ -533,7 +655,29 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 		if(ncom.nDirs != 0) printf("\n");
         }        
 	
-	if(flag.SORT_ABC) qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dirs);
+	if(flag.SORT_ABC){
+		qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dirs);
+	}
+
+	if((flag.SORT_TIME || flag.LAST_ACC || flag.LAST_CHANGE) && !flag.PRINT_LONG){
+		if(flag.LAST_MOD){
+			qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dir_mtime);
+		}else if(flag.LAST_ACC){
+			qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dir_atime);
+		}else if(flag.LAST_CHANGE){
+			qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dir_ctime);
+		}
+	}
+
+	if(flag.SORT_TIME && flag.PRINT_LONG){
+                if(flag.LAST_MOD){
+                        qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dir_mtime);
+                }else if(flag.LAST_ACC){
+                        qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dir_atime);
+                }else if(flag.LAST_CHANGE){
+                        qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dir_ctime);
+                }
+        }
 	           
         for(int i = 0; i < ncom.nDirs; i++){
                 frecord *records, *rectmp;

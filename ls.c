@@ -83,6 +83,7 @@ typedef struct{
 	bool LAST_MOD;
 	bool LAST_ACC;
 	bool LAST_CHANGE;
+	bool SORT_TIME;
 }argFlags;
 
 frecord * get_frecords();
@@ -100,7 +101,7 @@ maxLen maxlength();
 char * get_time_string();
 char * get_month();
 
-argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false};
+argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false, .SORT_TIME = false};
 
 int main(int argc, char **argv){
 	char *files[BUFFSIZE];
@@ -394,103 +395,6 @@ char * get_time_string(char *asctime){
 	return t;
 } 
 
-/*char * get_time_string2(struct tm t){
-	char *mtime;
-	mtime = malloc(sizeof(char *) * BUFFSIZE);
-	
-	strcpy(mtime, get_month(t.tm_mon));
-	strcat(mtime, " ");
-	
-	char day[BUFFSIZE];
-        if(t.tm_mday < 10){
-		sprintf(day, " %d", t.tm_mday);
-		strcat(mtime, day);
-		strcat(mtime, " ");
-	}else{
-		sprintf(day, "%d", t.tm_mday);
-		strcat(mtime, day);
-		strcat(mtime, " ");
-	}
-	int fyear = t.tm_year;
-	time_t cur = time(NULL);
-	struct tm *current_time = malloc(sizeof(struct tm));
-	current_time = localtime(&cur);
-	int cyear = current_time->tm_year;
-	if(fyear == cyear){
-		
-		char hour[BUFFSIZE];
-		if(t.tm_hour < 10){
-			sprintf(hour, "0%d", t.tm_hour);
-			strcat(mtime, hour);
-			strcat(mtime, ":");
-		}else{
-			sprintf(hour, "%d", t.tm_hour);
-			strcat(mtime, hour);
-			strcat(mtime, ":\0");
-		}
-	
-		char min[BUFFSIZE];
-		if(t.tm_min < 10){
-			sprintf(day, "0%d", t.tm_min);
-			strcat(mtime, min);
-		}else{
-			sprintf(min, "%d", t.tm_min);
-			strcat(mtime, min);
-		}
-	
-	}else{
-		char year[BUFFSIZE];
-		sprintf(year, " %d", fyear + 1900);
-		strcat(mtime, year);
-	}
-	//free(current_time);
-	return mtime;
-}*/
-
-char * get_month(int tm_mon){
-	char *m;
-	m = malloc(sizeof(char) * BUFFSIZE);
-	switch(tm_mon){
-		case 0 :
-			m = "Jan";
-			break;
-		case 1 : 
-                        m = "Feb";
-                        break;
-		case 2 : 
-                        m = "Mar";
-                        break;
-		case 3 : 
-                        m = "Apr";
-                        break;
-		case 4 : 
-                        m = "May";
-                        break;
-		case 5 : 
-                        m = "Jun";
-                        break;
-		case 6 : 
-                        m = "Jul";
-                        break;
-		case 7 : 
-                        m = "Aug";
-                        break;
-		case 8 : 
-                        m = "Sep";
-                        break;
-		case 9 : 
-                        m = "Oct";
-                        break;
-		case 10 : 
-                        m = "Nov";
-                        break;
-		case 11 : 
-                        m = "Dec";
-                        break;
-		
-	}
-	return m;
-}
 
 ncmd parse_command(char *files[], char *dirs[], char *args, int argc, char **argv){
 	DIR *dp;
@@ -554,6 +458,39 @@ int cmp_dirs(const void *a, const void *b){
         }
 }
 
+int cmp_mtime(const void *a, const void *b){
+        char *tmpl, *tmpr;
+
+        frecord *l = (frecord *)a;
+        frecord *r = (frecord *)b;
+	
+	long res = l->mtime - r->mtime;
+	
+	return (res != 0)?(-res):0;
+}
+
+int cmp_ctime(const void *a, const void *b){
+        char *tmpl, *tmpr;
+
+        frecord *l = (frecord *)a;
+        frecord *r = (frecord *)b;
+
+        long res = l->ctime - r->ctime;
+
+        return (res != 0)?(-res):0;
+}
+
+int cmp_atime(const void *a, const void *b){
+        char *tmpl, *tmpr;
+
+        frecord *l = (frecord *)a;
+        frecord *r = (frecord *)b;
+
+        long res = l->atime - r->atime;
+
+        return (res != 0)?(-res):0;
+}
+
 
 frecord *no_dot_records(frecord *records, long recent, maxLen *maxlen){
 	
@@ -602,7 +539,8 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                 frecord *records, *rectmp;
 		maxLen maxlen, mltmp;
 		int num_entries;
-
+		char time_string[BUFFSIZE];
+		
                 if(ncom.nDirs > 1) printf("%s:\n", dirs[i]);
 		
 		if(flag.HIDDEN_FILES){
@@ -616,7 +554,14 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
         	}
 
        		if(flag.SORT_ABC) qsort(records, num_entries, sizeof(frecord), cmp_str);	
-              
+                
+		if(flag.SORT_TIME){
+			if(flag.LAST_MOD) 	qsort(records, num_entries, sizeof(frecord), cmp_mtime);
+			if(flag.LAST_ACC)	qsort(records, num_entries, sizeof(frecord), cmp_atime);
+			if(flag.LAST_CHANGE)	qsort(records, num_entries, sizeof(frecord), cmp_ctime);
+		}
+		
+		
 		if(flag.PRINT_LONG && !flag.LONG_UID){
 			printf("Total %ld\n", maxlen.lTotal);
         
@@ -627,7 +572,14 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 
 				if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue; 
                 		
-				printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].smtime, records[nentry].name);
+				if(flag.LAST_MOD){
+					strcpy(time_string, records[nentry].smtime);
+				}else if(flag.LAST_CHANGE){
+					strcpy(time_string, records[nentry].sctime);
+                		}else if(flag.LAST_ACC){
+					strcpy(time_string, records[nentry].satime);
+				}
+				printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, time_string, records[nentry].name);
                 	}
                 	if(i + 1 != ncom.nDirs) printf("\n");
 		}
@@ -641,8 +593,16 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                                 int s2 = strcmp(records[nentry].name, "..");
 
                                 if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue;
+				
+				if(flag.LAST_MOD){
+                                        strcpy(time_string, records[nentry].smtime);
+                                }else if(flag.LAST_CHANGE){
+                                        strcpy(time_string, records[nentry].sctime);
+                                }else if(flag.LAST_ACC){
+                                        strcpy(time_string, records[nentry].satime);
+                                }
 
-				printf("%-10s %*d %*d %*d %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid, maxlen.lSize, records[nentry].size, records[nentry].smtime, records[nentry].name);
+				printf("%-10s %*d %*d %*d %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid, maxlen.lSize, records[nentry].size, time_string, records[nentry].name);
                         }
                         if(i + 1 != ncom.nDirs) printf("\n");
                 }
@@ -714,7 +674,22 @@ void parse_arguments(char *args, ncmd ncom){
 				flag.HIDDEN_FILES = true;
 				flag.PRINT_SIMPLE = true;
 				flag.UPPER_A = false;
+				flag.SORT_TIME = false;
 				disable_A = true;
+				break;
+			case 'u' :
+				flag.LAST_ACC = true;
+				flag.LAST_MOD = false;
+				flag.LAST_CHANGE = false;
+				break;
+			case 'c' :
+				flag.LAST_ACC = false;
+				flag.LAST_MOD = false;
+				flag.LAST_CHANGE = true;
+				break;
+			case 't' :
+				flag.SORT_TIME = true;
+				flag.SORT_ABC = false;
 				break;
 			default : 
 				printf("WRONG ARGUMENT\n");

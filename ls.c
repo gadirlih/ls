@@ -42,7 +42,12 @@ typedef struct{
 	uid_t uid;
 	gid_t gid;
 	long long size;
-	char time[BUFFSIZE];
+	char smtime[BUFFSIZE];
+	char sctime[BUFFSIZE];
+	char satime[BUFFSIZE];
+	long mtime;
+	long ctime;
+	long atime;
 	char name[BUFFSIZE];
 	char nslname[BUFFSIZE];
 	long blocks;
@@ -75,6 +80,9 @@ typedef struct{
 	bool LONG_UID;
 	bool NAME_SLINK;
 	bool UPPER_A;
+	bool LAST_MOD;
+	bool LAST_ACC;
+	bool LAST_CHANGE;
 }argFlags;
 
 frecord * get_frecords();
@@ -89,8 +97,10 @@ void parse_arguments();
 void get_arguments();
 frecord *no_dot_records();
 maxLen maxlength();
+char * get_time_string();
+char * get_month();
 
-argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false};
+argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false};
 
 int main(int argc, char **argv){
 	char *files[BUFFSIZE];
@@ -174,7 +184,8 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	frecord *records;
 	
 	int fd;
-	struct tm *time;
+	struct tm smtime, sctime, satime;
+	long mtime, chtime, atime;
 	DIR *dp;
 	struct dirent *dentry;
 	struct stat sbuff;
@@ -183,7 +194,9 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	char cwd[BUFFSIZE];
 	bool next_dir = false;
 	long lTotal = 0;
-		
+	//smtime = malloc(sizeof(struct tm));
+
+
 	if(!isFile){
 		if(chdir(path) < 0){
 			perror("chdir failed");
@@ -256,9 +269,17 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 			exit(1);
 		}
 	 
-		time = localtime(&sbuff.st_mtim.tv_sec);
-		strftime(timebuff, BUFFSIZE, "%3b %d %H:%M", time);
-		strcpy(records[nentry].time, timebuff);
+		smtime = *localtime(&sbuff.st_mtim.tv_sec);
+		sctime = *localtime(&sbuff.st_ctim.tv_sec);
+		satime = *localtime(&sbuff.st_atim.tv_sec);
+		//strftime(timebuff, BUFFSIZE, "%3b %d %H:%M", &smtime);
+		strcpy(records[nentry].smtime, get_time_string(asctime(&smtime)));
+		strcpy(records[nentry].sctime, get_time_string(asctime(&sctime)));
+		strcpy(records[nentry].satime, get_time_string(asctime(&satime)));
+		
+		records[nentry].mtime = sbuff.st_mtim.tv_sec;
+		records[nentry].ctime = sbuff.st_ctim.tv_sec;
+		records[nentry].atime = sbuff.st_atim.tv_sec;
 		nlink_t nlinks = sbuff.st_nlink;
 		records[nentry].nlinks = nlinks;
 		off_t size = sbuff.st_size;
@@ -351,6 +372,125 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	
 	return records;
 }
+char * get_time_string(char *asctime){
+	char *t;
+	int year;
+	t = malloc(sizeof(char *) * BUFFSIZE);
+	
+	
+	year = strtol(asctime + 20, 0, 10);
+
+	time_t cur = time(NULL);
+	struct tm *curt = localtime(&cur);
+	
+	if(year == curt->tm_year + 1900){
+		strncpy(t, asctime + 4, 12);
+	}else{
+		char tmp[BUFFSIZE];
+		sprintf(tmp, " %d", year);
+		strncpy(t, asctime + 4, 7);
+		strcat(t, tmp);
+	}
+	return t;
+} 
+
+/*char * get_time_string2(struct tm t){
+	char *mtime;
+	mtime = malloc(sizeof(char *) * BUFFSIZE);
+	
+	strcpy(mtime, get_month(t.tm_mon));
+	strcat(mtime, " ");
+	
+	char day[BUFFSIZE];
+        if(t.tm_mday < 10){
+		sprintf(day, " %d", t.tm_mday);
+		strcat(mtime, day);
+		strcat(mtime, " ");
+	}else{
+		sprintf(day, "%d", t.tm_mday);
+		strcat(mtime, day);
+		strcat(mtime, " ");
+	}
+	int fyear = t.tm_year;
+	time_t cur = time(NULL);
+	struct tm *current_time = malloc(sizeof(struct tm));
+	current_time = localtime(&cur);
+	int cyear = current_time->tm_year;
+	if(fyear == cyear){
+		
+		char hour[BUFFSIZE];
+		if(t.tm_hour < 10){
+			sprintf(hour, "0%d", t.tm_hour);
+			strcat(mtime, hour);
+			strcat(mtime, ":");
+		}else{
+			sprintf(hour, "%d", t.tm_hour);
+			strcat(mtime, hour);
+			strcat(mtime, ":\0");
+		}
+	
+		char min[BUFFSIZE];
+		if(t.tm_min < 10){
+			sprintf(day, "0%d", t.tm_min);
+			strcat(mtime, min);
+		}else{
+			sprintf(min, "%d", t.tm_min);
+			strcat(mtime, min);
+		}
+	
+	}else{
+		char year[BUFFSIZE];
+		sprintf(year, " %d", fyear + 1900);
+		strcat(mtime, year);
+	}
+	//free(current_time);
+	return mtime;
+}*/
+
+char * get_month(int tm_mon){
+	char *m;
+	m = malloc(sizeof(char) * BUFFSIZE);
+	switch(tm_mon){
+		case 0 :
+			m = "Jan";
+			break;
+		case 1 : 
+                        m = "Feb";
+                        break;
+		case 2 : 
+                        m = "Mar";
+                        break;
+		case 3 : 
+                        m = "Apr";
+                        break;
+		case 4 : 
+                        m = "May";
+                        break;
+		case 5 : 
+                        m = "Jun";
+                        break;
+		case 6 : 
+                        m = "Jul";
+                        break;
+		case 7 : 
+                        m = "Aug";
+                        break;
+		case 8 : 
+                        m = "Sep";
+                        break;
+		case 9 : 
+                        m = "Oct";
+                        break;
+		case 10 : 
+                        m = "Nov";
+                        break;
+		case 11 : 
+                        m = "Dec";
+                        break;
+		
+	}
+	return m;
+}
 
 ncmd parse_command(char *files[], char *dirs[], char *args, int argc, char **argv){
 	DIR *dp;
@@ -396,6 +536,25 @@ int cmp_str(const void *a, const void *b){
 	//return strcmp(l->name, r->name);
 }
 
+int cmp_dirs(const void *a, const void *b){
+        char *tmpl, *tmpr;
+
+        char **l = (char **)a;
+	char **r = (char **)b;
+
+        if(**(l) == '.') tmpl = *(l) + 1;
+        else tmpl = *l;
+
+        if(**(r) == '.') tmpr = *(r) + 1;
+        else tmpr = *r;
+
+        for(;;tmpl++, tmpr++){
+                int res = tolower(*tmpl) - tolower(*tmpr);
+                if(res != 0 || !*tmpl) return res;
+        }
+}
+
+
 frecord *no_dot_records(frecord *records, long recent, maxLen *maxlen){
 	
 	frecord *nodot;
@@ -431,12 +590,13 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 		
         	for(long nentry = 0; nentry < num_entries; nentry++){
         	
-			printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].time, records[nentry].name);
+			printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].smtime, records[nentry].name);
         
 		}
 		if(ncom.nDirs != 0) printf("\n");
         }        
-
+	
+	if(flag.SORT_ABC) qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dirs);
 	           
         for(int i = 0; i < ncom.nDirs; i++){
                 frecord *records, *rectmp;
@@ -467,7 +627,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 
 				if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue; 
                 		
-				printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].time, records[nentry].name);
+				printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].smtime, records[nentry].name);
                 	}
                 	if(i + 1 != ncom.nDirs) printf("\n");
 		}
@@ -482,7 +642,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 
                                 if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue;
 
-				printf("%-10s %*d %*d %*d %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid, maxlen.lSize, records[nentry].size, records[nentry].time, records[nentry].name);
+				printf("%-10s %*d %*d %*d %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid, maxlen.lSize, records[nentry].size, records[nentry].smtime, records[nentry].name);
                         }
                         if(i + 1 != ncom.nDirs) printf("\n");
                 }
@@ -505,9 +665,9 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 				}
 				maxt = maxlen;
 				maxt.lEntries -= 2;
-				print_default(recA, &maxt);
+				if(maxt.lEntries > 0) print_default(recA, &maxt);
 			}else{
-				print_default(records, &maxlen);
+				if(maxlen.lEntries > 0) print_default(records, &maxlen);
 			}
 			if(i + 1 != ncom.nDirs) printf("\n");
 		}

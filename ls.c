@@ -90,6 +90,7 @@ typedef struct{
 	bool SORT_TIME;
 	bool SORT_SIZE;
 	bool SORT_ABC_DIR;
+	bool REVERSE;
 }argFlags;
 
 frecord * get_frecords();
@@ -107,7 +108,7 @@ maxLen maxlength();
 char * get_time_string();
 char * get_month();
 
-argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false, .SORT_TIME = false, .SORT_SIZE = false, .SORT_ABC_DIR = true};
+argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false, .SORT_TIME = false, .SORT_SIZE = false, .SORT_ABC_DIR = true, .REVERSE = false};
 
 int main(int argc, char **argv){
 	char *files[BUFFSIZE];
@@ -648,6 +649,18 @@ frecord *no_dot_records(frecord *records, long recent, maxLen *maxlen){
 	return nodot;
 }
 
+frecord *reverse_record(frecord *records, long nentry){
+	frecord *rev;
+	rev = malloc(nentry * sizeof(frecord));
+	long n = 0;
+	
+	for(int i = nentry - 1; i >= 0; i--){
+		rev[n] = records[i];
+		n++;
+	}
+	
+	return rev;
+}
 
 void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 	//printf("args: %s\n", args);
@@ -726,7 +739,10 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 		
 		if(flag.SORT_SIZE) qsort(records, num_entries, sizeof(frecord), cmp_size);
 		
-		
+		if(flag.REVERSE && (flag.SORT_SIZE || flag.SORT_TIME || flag.SORT_ABC)){
+			records = reverse_record(records, num_entries);
+		}
+			
 		if(flag.PRINT_LONG && !flag.LONG_UID){
 			printf("Total %ld\n", maxlen.lTotal);
         
@@ -856,11 +872,15 @@ void parse_arguments(char *args, ncmd ncom){
 			case 't' :
 				flag.SORT_TIME = true;
 				flag.SORT_ABC = false;
+				flag.SORT_SIZE = false;
 				break;
 			case 'S' :
 				flag.SORT_SIZE = true;
 				flag.SORT_ABC = false;
 				flag.SORT_TIME = false;
+				break;
+			case 'r' :
+				flag.REVERSE = true;
 				break;
 			default : 
 				printf("WRONG ARGUMENT\n");

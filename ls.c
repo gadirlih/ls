@@ -79,6 +79,7 @@ typedef struct{
 	int nFiles;
 	int nDirs;
 	int nArgs;
+	int nFD;
 }ncmd;
 
 typedef struct{
@@ -98,6 +99,8 @@ typedef struct{
 	bool REVERSE;
 	bool BYTE_SIZE;
 	bool INODE;
+	bool RECURSIVE;
+	bool DIR_PLAIN;
 }argFlags;
 
 frecord * get_frecords();
@@ -106,8 +109,8 @@ char * get_username(uid_t st_uid);
 char * get_groupname(gid_t st_gid);
 int nDigits(long the_integer);
 void print_default(frecord *records,  maxLen *max_length);
-void print_result(char *files[], char *dirs[], char *args, ncmd ncom);
-ncmd parse_command(char *files[], char *dirs[], char *args, int argc, char **argv);
+void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom);
+ncmd parse_command(char *files[], char *dirs[], char *fd[], char *args, int argc, char **argv);
 void parse_arguments();
 void get_arguments();
 frecord *no_dot_records();
@@ -124,15 +127,16 @@ argFlags flag ={.PRINT_SIMPLE = true, 	.PRINT_LONG = false, 	.HIDDEN_FILES = fal
 		.UPPER_A = false, 	.LAST_MOD = true, 	.LAST_ACC = false, 
 		.LAST_CHANGE = false, 	.SORT_TIME = false, 	.SORT_SIZE = false, 
 		.SORT_ABC_DIR = true, 	.REVERSE = false, 	.BYTE_SIZE = false, 
-		.INODE = false};
+		.INODE = false,		.RECURSIVE = false, 	.DIR_PLAIN = false};
 
 int main(int argc, char **argv){
 	char *files[BUFFSIZE];
 	char *dirs[BUFFSIZE];
+	char *fd[BUFFSIZE];
 	char args[BUFFSIZE];
 	ncmd ncom;
 	
-	ncom = parse_command(files, dirs, args, argc, argv);
+	ncom = parse_command(files, dirs, fd, args, argc, argv);
 	if(ncom.nFiles == 0 && ncom.nDirs == 0){
 		char def[1] = {'.'};
 		dirs[0] = def;
@@ -141,7 +145,7 @@ int main(int argc, char **argv){
 
 	setlocale(LC_ALL, "en_US.UTF-8");
 
-	print_result(files, dirs, args, ncom);
+	print_result(files, dirs, fd, args, ncom);
 
 	return EXIT_SUCCESS;
 }
@@ -271,7 +275,8 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	if(!isFile) {
 		records = malloc(nentry * sizeof(frecord)); 	//allocate memory for records
 	}else{
-		records = malloc((ncom->nFiles) * sizeof(frecord));		//allocate mem for 1 file
+		if(flag.DIR_PLAIN)	records = malloc((ncom->nFD) * sizeof(frecord)); 
+		else 			records = malloc((ncom->nFiles) * sizeof(frecord));
 	}
 
 	int max = 0;
@@ -294,7 +299,8 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	int f = 0;
 	int file_count = 0;
 	if(files != NULL){
-		file_count = ncom->nFiles;
+		if(flag.DIR_PLAIN)	file_count = ncom->nFD;
+		else			file_count = ncom->nFiles;
 	}
 	
 	while(isFile || next_dir){
@@ -451,27 +457,34 @@ char * get_time_string(char *asctime){
 } 
 
 
-ncmd parse_command(char *files[], char *dirs[], char *args, int argc, char **argv){
+ncmd parse_command(char *files[], char *dirs[], char *fd[], char *args, int argc, char **argv){
 	DIR *dp;
 	ncmd ncom;
 	int f = 0;
 	int d = 0;
+	int f_d = 0;
 
 	for(int i = 1; i < argc; i++){
 		char *tmp = argv[i];
 		if((dp = opendir(argv[i])) != NULL){
         		dirs[d] = argv[i];
+			fd[f_d] = argv[i];
 			d++;
+			f_d++;
         	}else if(tmp[0] == '-'){
 			strcat(args, tmp + 1);
 		}else{
 			files[f] = argv[i];
+			fd[f_d] = argv[i];
 			f++;
+			f_d++;
 		}
 	}
 	ncom.nFiles = f;
 	ncom.nDirs = d;
 	ncom.nArgs = strlen(args);
+	ncom.nFD = f_d;
+	
 	return ncom;
 }
 
@@ -737,9 +750,9 @@ char * byte_size(long long size)
     return result;
 }
 
-void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
+void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom){
 	//printf("args: %s\n", args);
-	parse_arguments(args);
+	parse_arguments(args, ncom);
 	long num_entries;
         int max_nlength;
         char cwd[BUFFSIZE];
@@ -753,7 +766,10 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                 int num_entries;
                 char time_string[BUFFSIZE];
 		
-		if(flag.HIDDEN_FILES){
+		if(flag.DIR_PLAIN){
+                        records = get_frecords(NULL, &maxlen, true, fd, &ncom);
+                        num_entries = maxlen.lEntries;
+                }else if(flag.HIDDEN_FILES){
                         records = get_frecords(NULL, &maxlen, true, files, &ncom);
                         num_entries = maxlen.lEntries;
                 }else{
@@ -762,6 +778,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                         records = no_dot_records(rectmp, mltmp.lEntries, &maxlen);
                         num_entries = maxlen.lEntries;
                 }
+
 
                 if(flag.SORT_ABC) qsort(records, num_entries, sizeof(frecord), cmp_str);
 
@@ -816,7 +833,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                                         	time_string, records[nentry].name);
 				}
 			}
-			if(ncom.nDirs != 0) printf("\n");
+			if(ncom.nDirs != 0 && !flag.DIR_PLAIN) printf("\n");
                 }
 		
 		if(flag.PRINT_LONG && flag.LONG_UID){
@@ -857,7 +874,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                                         time_string, records[nentry].name);
 				}
 			}
-                        if(ncom.nDirs != 0) printf("\n");
+                        if(ncom.nDirs != 0 && !flag.DIR_PLAIN) printf("\n");
                 }
 		
 		if(flag.PRINT_SIMPLE){
@@ -883,12 +900,12 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                         }else{
                                 if(maxlen.lEntries > 0) print_default(records, &maxlen);
                         }
-                        if(ncom.nDirs != 0) printf("\n");
+                        if(ncom.nDirs != 0 && !flag.DIR_PLAIN) printf("\n");
                 }
 
         }        
 	
-	
+	if(!flag.DIR_PLAIN){
 	qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dirs);
 	
 
@@ -1064,6 +1081,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 
                 chdir("..");
         }
+	}
 
 }
 
@@ -1071,6 +1089,8 @@ void parse_arguments(char *args, ncmd ncom){
 	
 	int a = 0;
 	bool disable_A = false;
+	bool disable_R = false;
+	bool disable_L = false;
 	
 	while(a < ncom.nArgs){
 		
@@ -1088,7 +1108,7 @@ void parse_arguments(char *args, ncmd ncom){
 			case 'l' :
 				flag.PRINT_LONG = true;
 				flag.NAME_SLINK = true;
-				flag.LONG_UID = false;
+				if(!disable_L) flag.LONG_UID = false;
 				flag.PRINT_SIMPLE = false;
 				break;
 			case 'n' :
@@ -1096,6 +1116,7 @@ void parse_arguments(char *args, ncmd ncom){
 				flag.NAME_SLINK = true;
 				flag.LONG_UID = true;
 				flag.PRINT_SIMPLE = false;
+				disable_L = true;
 				break;
 			case 'f' :
 				flag.PRINT_LONG = false;
@@ -1136,6 +1157,13 @@ void parse_arguments(char *args, ncmd ncom){
 				break;
 			case 'i' :
 				flag.INODE = true;
+				break;
+			case 'd' :
+				flag.DIR_PLAIN = true;
+				disable_R = true;
+				break;
+			case 'R' :
+				if(!disable_R) flag.RECURSIVE = true;
 				break;
 			default : 
 				printf("WRONG ARGUMENT\n");

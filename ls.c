@@ -43,6 +43,7 @@ typedef struct{
 	uid_t uid;
 	gid_t gid;
 	long long size;
+	char byte[BUFFSIZE];
 	char smtime[BUFFSIZE];
 	char sctime[BUFFSIZE];
 	char satime[BUFFSIZE];
@@ -64,6 +65,7 @@ typedef struct{
 	int lUid;
 	int lGid;
 	int lSize;
+	int lByte;
 	int lName;
 	int lNslname;
 	int lEntries;
@@ -91,6 +93,7 @@ typedef struct{
 	bool SORT_SIZE;
 	bool SORT_ABC_DIR;
 	bool REVERSE;
+	bool BYTE_SIZE;
 }argFlags;
 
 frecord * get_frecords();
@@ -106,9 +109,13 @@ void get_arguments();
 frecord *no_dot_records();
 maxLen maxlength();
 char * get_time_string();
-char * get_month();
+char * byte_size();
 
-argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false, .SORT_TIME = false, .SORT_SIZE = false, .SORT_ABC_DIR = true, .REVERSE = false};
+static const char *sizes[]   = { "E", "P", "T", "G", "M", "K", "" };
+static const long long exbibytes = 1024ULL * 1024ULL * 1024ULL *
+                                   1024ULL * 1024ULL * 1024ULL;
+
+argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false, .SORT_TIME = false, .SORT_SIZE = false, .SORT_ABC_DIR = true, .REVERSE = false, .BYTE_SIZE = false};
 
 int main(int argc, char **argv){
 	char *files[BUFFSIZE];
@@ -141,6 +148,7 @@ maxLen maxlength(frecord *records, long ent){
         int groupname_max_len = 0;
         int uid_max_len = 0;
         int gid_max_len = 0;
+	int byte_max_len = 0;
         int nentry = 0;
 	long total = 0;
 	
@@ -154,6 +162,9 @@ maxLen maxlength(frecord *records, long ent){
         	if((len = strlen(records[nentry].username)) > username_max_len){
                 	username_max_len = len;
         	}
+		if((len = strlen(records[nentry].byte)) > byte_max_len){
+                        byte_max_len = len;
+                }
 		if((len = strlen(records[nentry].nslname)) > nslname_max_len){
                         nslname_max_len = len;
                 }
@@ -186,6 +197,8 @@ maxLen maxlength(frecord *records, long ent){
         max_length.lUid = uid_max_len;
         max_length.lGid = gid_max_len;
 	max_length.lTotal = total;
+	max_length.lByte = byte_max_len;
+	
 	return max_length;
 }
 
@@ -203,6 +216,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	char slinkbuff[BUFFSIZE];
 	char timebuff[BUFFSIZE];
 	char cwd[BUFFSIZE];
+	char *byte;
 	bool next_dir = false;
 	long lTotal = 0;
 	//smtime = malloc(sizeof(struct tm));
@@ -253,6 +267,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	int groupname_max_len = 0;
 	int uid_max_len = 0;
 	int gid_max_len = 0;
+	int byte_max_len = 0;
 	nentry = 0;
 
 	if(!isFile){
@@ -279,7 +294,8 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 			perror("lstat2 failed");
 			exit(1);
 		}
-	 
+	 	byte = byte_size(sbuff.st_size);
+		strcpy(records[nentry].byte, byte);
 		smtime = *localtime(&sbuff.st_mtim.tv_sec);
 		sctime = *localtime(&sbuff.st_ctim.tv_sec);
 		satime = *localtime(&sbuff.st_atim.tv_sec);
@@ -338,6 +354,9 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 		if((len = strlen(records[nentry].username)) > username_max_len){
 			username_max_len = len;
 		}
+		if((len = strlen(records[nentry].byte)) > byte_max_len){
+                        byte_max_len = len;
+                }
 		if((len = strlen(records[nentry].nslname)) > nslname_max_len){
                         nslname_max_len = len;
                 }
@@ -383,7 +402,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	max_length->lSize = size_max_len;
 	max_length->lUid = uid_max_len;
 	max_length->lGid = gid_max_len;
-
+	max_length->lByte = byte_max_len;
 	
 	
 	return records;
@@ -662,6 +681,27 @@ frecord *reverse_record(frecord *records, long nentry){
 	return rev;
 }
 
+char * byte_size(long long size)
+{   
+    char * result = (char *) malloc(sizeof(char) * 20);
+    long long multiplier = exbibytes;
+    
+    for (int i = 0; i < sizeof(sizes)/sizeof(*(sizes)); i++, multiplier /= 1024)
+    {   
+        if (size < multiplier)
+            continue;
+        if (size % multiplier == 0){
+            	if(i != 6) sprintf(result, "%lld.0%s", size / multiplier, sizes[i]);
+		else sprintf(result, "%lld%s", size / multiplier, sizes[i]);
+        }else{
+            sprintf(result, "%.1Lf%s", (long double) size / multiplier + 0.05, sizes[i]);
+        }
+	return result;
+    }
+    strcpy(result, "0");
+    return result;
+}
+
 void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 	//printf("args: %s\n", args);
 	parse_arguments(args);
@@ -760,7 +800,15 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                 		}else if(flag.LAST_ACC){
 					strcpy(time_string, records[nentry].satime);
 				}
-				printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, time_string, records[nentry].name);
+				char size[BUFFSIZE];
+				sprintf(size, "%lld", records[nentry].size);
+				
+				printf("%-10s %*d %-*s %-*s %*s %s %-s\n",
+					records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, 
+					maxlen.lUsername, records[nentry].username, maxlen.lGroupname, 
+					records[nentry].groupname, (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize, 
+					(flag.BYTE_SIZE)?records[nentry].byte:size, 
+					time_string, records[nentry].name);
                 	}
                 	if(i + 1 != ncom.nDirs) printf("\n");
 		}
@@ -782,8 +830,15 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                                 }else if(flag.LAST_ACC){
                                         strcpy(time_string, records[nentry].satime);
                                 }
-
-				printf("%-10s %*d %*d %*d %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid, maxlen.lSize, records[nentry].size, time_string, records[nentry].name);
+				
+				char size[BUFFSIZE];
+                                sprintf(size, "%lld", records[nentry].size);
+				printf("%-10s %*d %*d %*d %*s %s %-s\n",
+					records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, 
+					maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid, 
+					(flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize, 
+					(flag.BYTE_SIZE)?records[nentry].byte:size, 
+					time_string, records[nentry].name);
                         }
                         if(i + 1 != ncom.nDirs) printf("\n");
                 }
@@ -881,6 +936,9 @@ void parse_arguments(char *args, ncmd ncom){
 				break;
 			case 'r' :
 				flag.REVERSE = true;
+				break;
+			case 'h' :
+				flag.BYTE_SIZE = true;
 				break;
 			default : 
 				printf("WRONG ARGUMENT\n");

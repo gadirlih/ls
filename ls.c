@@ -53,6 +53,7 @@ typedef struct{
 	long nmtime;
 	long nctime;
 	long natime;
+	long inode;
 	char name[BUFFSIZE];
 	char nslname[BUFFSIZE];
 	long blocks;
@@ -69,6 +70,7 @@ typedef struct{
 	int lName;
 	int lNslname;
 	int lEntries;
+	long lInode;
 	long lTotal;
 	char total[BUFFSIZE];
 }maxLen;
@@ -95,6 +97,7 @@ typedef struct{
 	bool SORT_ABC_DIR;
 	bool REVERSE;
 	bool BYTE_SIZE;
+	bool INODE;
 }argFlags;
 
 frecord * get_frecords();
@@ -116,7 +119,12 @@ static const char *sizes[]   = { "E", "P", "T", "G", "M", "K", "" };
 static const long long exbibytes = 1024ULL * 1024ULL * 1024ULL *
                                    1024ULL * 1024ULL * 1024ULL;
 
-argFlags flag = {.PRINT_SIMPLE = true, .PRINT_LONG = false, .HIDDEN_FILES = false, .SORT_ABC = true, .LONG_UID = false, .NAME_SLINK = false, .UPPER_A = false, .LAST_MOD = true, .LAST_ACC = false, .LAST_CHANGE = false, .SORT_TIME = false, .SORT_SIZE = false, .SORT_ABC_DIR = true, .REVERSE = false, .BYTE_SIZE = false};
+argFlags flag ={.PRINT_SIMPLE = true, 	.PRINT_LONG = false, 	.HIDDEN_FILES = false, 
+		.SORT_ABC = true, 	.LONG_UID = false, 	.NAME_SLINK = false, 
+		.UPPER_A = false, 	.LAST_MOD = true, 	.LAST_ACC = false, 
+		.LAST_CHANGE = false, 	.SORT_TIME = false, 	.SORT_SIZE = false, 
+		.SORT_ABC_DIR = true, 	.REVERSE = false, 	.BYTE_SIZE = false, 
+		.INODE = false};
 
 int main(int argc, char **argv){
 	char *files[BUFFSIZE];
@@ -150,6 +158,7 @@ maxLen maxlength(frecord *records, long ent){
         int uid_max_len = 0;
         int gid_max_len = 0;
 	int byte_max_len = 0;
+	long inode_max_len;
         int nentry = 0;
 	long total = 0;
 	
@@ -184,6 +193,9 @@ maxLen maxlength(frecord *records, long ent){
         	if((len = nDigits(records[nentry].gid)) > gid_max_len){
                 	 gid_max_len = len;
         	}
+		if((len = nDigits(records[nentry].inode)) > inode_max_len){
+                        inode_max_len = len;
+                }
 		total += records[nentry].blocks;
 		nentry++;
 	}
@@ -200,7 +212,8 @@ maxLen maxlength(frecord *records, long ent){
 	max_length.lTotal = total;
 	max_length.lByte = byte_max_len;
 	strcpy(max_length.total, byte_size(total * 1024));
-	
+	max_length.lInode = inode_max_len;
+
 	return max_length;
 }
 
@@ -270,6 +283,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	int uid_max_len = 0;
 	int gid_max_len = 0;
 	int byte_max_len = 0;
+	long inode_max_len = 0;
 	nentry = 0;
 
 	if(!isFile){
@@ -314,6 +328,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
                 records[nentry].nctime = sbuff.st_ctim.tv_nsec;
                 records[nentry].natime = sbuff.st_atim.tv_nsec;
 		
+		records[nentry].inode = sbuff.st_ino;
 		nlink_t nlinks = sbuff.st_nlink;
 		records[nentry].nlinks = nlinks;
 		off_t size = sbuff.st_size;
@@ -377,6 +392,9 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 		if((len = nDigits(records[nentry].gid)) > gid_max_len){
                         gid_max_len = len;
                 }
+		if((len = nDigits(records[nentry].inode)) > inode_max_len){
+                        inode_max_len = len;
+                }
 
 		if(!isFile){
                 	if((dentry = readdir(dp)) != NULL){
@@ -406,7 +424,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	max_length->lGid = gid_max_len;
 	max_length->lByte = byte_max_len;
 	strcpy(max_length->total, byte_size(lTotal * 1024));
-	
+	max_length->lInode = inode_max_len;
 	
 	return records;
 }
@@ -777,13 +795,26 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                                 }
                                 char size[BUFFSIZE];
                                 sprintf(size, "%lld", records[nentry].size);
-
-                                printf("%-10s %*d %-*s %-*s %*s %s %-s\n",
-                                        records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks,
-                                        maxlen.lUsername, records[nentry].username, maxlen.lGroupname,
-                                        records[nentry].groupname, (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
-                                        (flag.BYTE_SIZE)?records[nentry].byte:size,
-                                        time_string, records[nentry].name);
+				
+				if(flag.INODE){
+					printf("%*ld %-10s %*d %-*s %-*s %*s %s %-s\n",
+                                        	maxlen.lInode, records[nentry].inode, records[nentry].mode,
+						maxlen.lNlinks, records[nentry].nlinks,
+                                        	maxlen.lUsername, records[nentry].username, maxlen.lGroupname,
+                                        	records[nentry].groupname, 
+						(flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
+                                        	(flag.BYTE_SIZE)?records[nentry].byte:size,
+                                        	time_string, records[nentry].name);
+				}else{
+				
+                                	printf("%-10s %*d %-*s %-*s %*s %s %-s\n",
+                                        	records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks,
+                                        	maxlen.lUsername, records[nentry].username, maxlen.lGroupname,
+                                        	records[nentry].groupname,
+						(flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
+                                       		(flag.BYTE_SIZE)?records[nentry].byte:size,
+                                        	time_string, records[nentry].name);
+				}
 			}
 			if(ncom.nDirs != 0) printf("\n");
                 }
@@ -807,13 +838,25 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 
                                 char size[BUFFSIZE];
                                 sprintf(size, "%lld", records[nentry].size);
-                                printf("%-10s %*d %*d %*d %*s %s %-s\n",
+                               	
+				if(flag.INODE){
+					printf("%*d %-10s %*d %*d %*d %*s %s %-s\n",
+                                        maxlen.lInode, records[nentry].inode, records[nentry].mode, 
+					maxlen.lNlinks, records[nentry].nlinks,
+                                        maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid,
+                                        (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
+                                        (flag.BYTE_SIZE)?records[nentry].byte:size,
+                                        time_string, records[nentry].name);
+				}else{
+					
+				printf("%-10s %*d %*d %*d %*s %s %-s\n",
                                         records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks,
                                         maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid,
                                         (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
                                         (flag.BYTE_SIZE)?records[nentry].byte:size,
                                         time_string, records[nentry].name);
 				}
+			}
                         if(ncom.nDirs != 0) printf("\n");
                 }
 		
@@ -927,12 +970,23 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 				char size[BUFFSIZE];
 				sprintf(size, "%lld", records[nentry].size);
 				
+				if(flag.INODE){
+				
+				printf("%*ld %-10s %*d %-*s %-*s %*s %s %-s\n",
+                                        maxlen.lInode, records[nentry].inode, records[nentry].mode, 
+					maxlen.lNlinks, records[nentry].nlinks, 
+                                        maxlen.lUsername, records[nentry].username, maxlen.lGroupname, 
+                                        records[nentry].groupname, (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
+                                        (flag.BYTE_SIZE)?records[nentry].byte:size,
+                                        time_string, records[nentry].name);
+				}else{
 				printf("%-10s %*d %-*s %-*s %*s %s %-s\n",
 					records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, 
 					maxlen.lUsername, records[nentry].username, maxlen.lGroupname, 
 					records[nentry].groupname, (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize, 
 					(flag.BYTE_SIZE)?records[nentry].byte:size, 
 					time_string, records[nentry].name);
+				}
                 	}
                 	if(i + 1 != ncom.nDirs) printf("\n");
 		}
@@ -962,12 +1016,23 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 				
 				char size[BUFFSIZE];
                                 sprintf(size, "%lld", records[nentry].size);
+				
+				if(flag.INODE){
+				printf("%*d %-10s %*d %*d %*d %*s %s %-s\n",
+                                        maxlen.lInode, records[nentry].inode, records[nentry].mode,
+					maxlen.lNlinks, records[nentry].nlinks,
+                                        maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid,
+                                        (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
+                                        (flag.BYTE_SIZE)?records[nentry].byte:size,
+                                        time_string, records[nentry].name);
+				}else{
 				printf("%-10s %*d %*d %*d %*s %s %-s\n",
 					records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, 
 					maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid, 
 					(flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize, 
 					(flag.BYTE_SIZE)?records[nentry].byte:size, 
 					time_string, records[nentry].name);
+				}
                         }
                         if(i + 1 != ncom.nDirs) printf("\n");
                 }
@@ -1069,6 +1134,9 @@ void parse_arguments(char *args, ncmd ncom){
 			case 'h' :
 				flag.BYTE_SIZE = true;
 				break;
+			case 'i' :
+				flag.INODE = true;
+				break;
 			default : 
 				printf("WRONG ARGUMENT\n");
 				exit(1);
@@ -1080,15 +1148,21 @@ void parse_arguments(char *args, ncmd ncom){
 void print_default(frecord *records, maxLen *maxlen){
 	struct winsize w;
         ioctl(0, TIOCGWINSZ, &w);
+	bool extra_tab = false;
         int width = w.ws_col;
 
         int n = maxlen->lEntries;
-	int max_name_len = maxlen->lNslname;
-        int num_tabs = (max_name_len + TABSIZE -1) / TABSIZE;
+	
+	int max_name_len = 0;
+	if(flag.INODE) 	max_name_len = maxlen->lNslname + maxlen->lInode + 1;
+	else 		max_name_len = maxlen->lNslname;
+	     
+	int num_tabs = (max_name_len + TABSIZE -1) / TABSIZE;
         int col_width = num_tabs * TABSIZE;
+	if(max_name_len == col_width) col_width += TABSIZE;
         int cols = width / col_width;
         int rows = (n + cols - 1) / cols;
-
+	
 
         for(int r = 0; r < rows; r++){
                 for(int c = 0; c < cols; c++){
@@ -1096,11 +1170,19 @@ void print_default(frecord *records, maxLen *maxlen){
                         int index = c * rows + r;
                         if(index >= n) continue;
                         //index = id[index];
-
-                        int len = strlen(records[index].nslname);
-                        int tabs_needed = (col_width - len + TABSIZE - 1) / TABSIZE;
 			
-                        printf("%s", records[index].nslname);
+			int len = 0;
+			
+                        if(flag.INODE) len = strlen(records[index].nslname) + maxlen->lInode + 1;
+                        else	       len = strlen(records[index].nslname);
+			
+			int tabs_needed = (col_width - len + TABSIZE - 1) / TABSIZE;
+			
+                        if(flag.INODE)	printf("%*d %s", 
+					maxlen->lInode,  
+					records[index].inode, 
+					records[index].nslname);
+			else		printf("%s", records[index].nslname);
                         while(tabs_needed--) putchar('\t');
                 }
                 putchar('\n');

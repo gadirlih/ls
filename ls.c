@@ -70,6 +70,7 @@ typedef struct{
 	int lNslname;
 	int lEntries;
 	long lTotal;
+	char total[BUFFSIZE];
 }maxLen;
 
 typedef struct{
@@ -198,6 +199,7 @@ maxLen maxlength(frecord *records, long ent){
         max_length.lGid = gid_max_len;
 	max_length.lTotal = total;
 	max_length.lByte = byte_max_len;
+	strcpy(max_length.total, byte_size(total * 1024));
 	
 	return max_length;
 }
@@ -403,6 +405,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	max_length->lUid = uid_max_len;
 	max_length->lGid = gid_max_len;
 	max_length->lByte = byte_max_len;
+	strcpy(max_length->total, byte_size(lTotal * 1024));
 	
 	
 	return records;
@@ -681,6 +684,20 @@ frecord *reverse_record(frecord *records, long nentry){
 	return rev;
 }
 
+void reverse_dir(char *dirs[], long ent){
+	char *rev[BUFFSIZE];
+	long n = 0;
+	for(int i = ent - 1; i >= 0; i--){
+		rev[n] = dirs[i];
+		n++;
+	}
+	
+	for(int i = 0; i < ent; i++){
+		dirs[i] = rev[i];
+	}
+	dirs = rev;
+}
+
 char * byte_size(long long size)
 {   
     char * result = (char *) malloc(sizeof(char) * 20);
@@ -713,18 +730,119 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 
 	
         if(ncom.nFiles != 0){
-		maxLen maxlen;
-		frecord *records = get_frecords(NULL, &maxlen, true, files, &ncom);
-		int num_entries = maxlen.lEntries;
+		frecord *records, *rectmp;
+                maxLen maxlen, mltmp;
+                int num_entries;
+                char time_string[BUFFSIZE];
 		
-		if(flag.SORT_ABC) qsort(records, ncom.nFiles, sizeof(frecord), cmp_str);
+		if(flag.HIDDEN_FILES){
+                        records = get_frecords(NULL, &maxlen, true, files, &ncom);
+                        num_entries = maxlen.lEntries;
+                }else{
+                        rectmp = get_frecords(NULL, &mltmp, true, files, &ncom);
+
+                        records = no_dot_records(rectmp, mltmp.lEntries, &maxlen);
+                        num_entries = maxlen.lEntries;
+                }
+
+                if(flag.SORT_ABC) qsort(records, num_entries, sizeof(frecord), cmp_str);
+
+                if(flag.SORT_TIME){
+                        if(flag.LAST_MOD)       qsort(records, num_entries, sizeof(frecord), cmp_mtime);
+                        if(flag.LAST_ACC)       qsort(records, num_entries, sizeof(frecord), cmp_atime);
+                        if(flag.LAST_CHANGE)    qsort(records, num_entries, sizeof(frecord), cmp_ctime);
+                }
+
+                if(flag.SORT_SIZE) qsort(records, num_entries, sizeof(frecord), cmp_size);
+
+                if(flag.REVERSE && (flag.SORT_SIZE || flag.SORT_TIME || flag.SORT_ABC)){
+                        records = reverse_record(records, num_entries);
+                }
+
+                if(flag.PRINT_LONG && !flag.LONG_UID){
+                        
+                        for(long nentry = 0; nentry < num_entries; nentry++){
+
+                                int s1 = strcmp(records[nentry].name, ".");
+                                int s2 = strcmp(records[nentry].name, "..");
+
+                                if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue;
+
+                                if(flag.LAST_MOD){
+                                        strcpy(time_string, records[nentry].smtime);
+                                }else if(flag.LAST_CHANGE){
+                                        strcpy(time_string, records[nentry].sctime);
+                                }else if(flag.LAST_ACC){
+                                        strcpy(time_string, records[nentry].satime);
+                                }
+                                char size[BUFFSIZE];
+                                sprintf(size, "%lld", records[nentry].size);
+
+                                printf("%-10s %*d %-*s %-*s %*s %s %-s\n",
+                                        records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks,
+                                        maxlen.lUsername, records[nentry].username, maxlen.lGroupname,
+                                        records[nentry].groupname, (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
+                                        (flag.BYTE_SIZE)?records[nentry].byte:size,
+                                        time_string, records[nentry].name);
+			}
+			if(ncom.nDirs != 0) printf("\n");
+                }
 		
-        	for(long nentry = 0; nentry < num_entries; nentry++){
-        	
-			printf("%-10s %*d %-*s %-*s %*lld %s %-s\n",records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks, maxlen.lUsername, records[nentry].username, maxlen.lGroupname, records[nentry].groupname, maxlen.lSize, records[nentry].size, records[nentry].smtime, records[nentry].name);
-        
-		}
-		if(ncom.nDirs != 0) printf("\n");
+		if(flag.PRINT_LONG && flag.LONG_UID){
+                        
+			for(long nentry = 0; nentry < num_entries; nentry++){
+
+                                int s1 = strcmp(records[nentry].name, ".");
+                                int s2 = strcmp(records[nentry].name, "..");
+
+                                if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue;
+
+                                if(flag.LAST_MOD){
+                                        strcpy(time_string, records[nentry].smtime);
+                                }else if(flag.LAST_CHANGE){
+                                        strcpy(time_string, records[nentry].sctime);
+                                }else if(flag.LAST_ACC){
+                                        strcpy(time_string, records[nentry].satime);
+                                }
+
+                                char size[BUFFSIZE];
+                                sprintf(size, "%lld", records[nentry].size);
+                                printf("%-10s %*d %*d %*d %*s %s %-s\n",
+                                        records[nentry].mode, maxlen.lNlinks, records[nentry].nlinks,
+                                        maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid,
+                                        (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
+                                        (flag.BYTE_SIZE)?records[nentry].byte:size,
+                                        time_string, records[nentry].name);
+				}
+                        if(ncom.nDirs != 0) printf("\n");
+                }
+		
+		if(flag.PRINT_SIMPLE){
+                        if(flag.UPPER_A){
+                                frecord *recA;
+                                recA = malloc(maxlen.lEntries * sizeof(frecord));
+                                int f = 0;
+                                int s1, s2;
+                                maxLen maxt;
+                                for(int i = 0; i < maxlen.lEntries; i++){
+
+                                        s1 = strcmp(records[i].name, ".");
+                                        s2 = strcmp(records[i].name, "..");
+
+                                        if(flag.UPPER_A && (s1 == 0 || s2 == 0)) continue;
+
+                                        recA[f] =  records[i];
+                                        f++;
+                                }
+                                maxt = maxlen;
+                                maxt.lEntries -= 2;
+                                if(maxt.lEntries > 0) print_default(recA, &maxt);
+                        }else{
+                                if(maxlen.lEntries > 0) print_default(records, &maxlen);
+                        }
+                        if(ncom.nDirs != 0) printf("\n");
+                }
+
         }        
 	
 	
@@ -750,6 +868,8 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
                         qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dir_ctime);
                 }
         }
+	
+	if(flag.REVERSE) reverse_dir(dirs, ncom.nDirs);
 	           
         for(int i = 0; i < ncom.nDirs; i++){
                 frecord *records, *rectmp;
@@ -757,7 +877,7 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 		int num_entries;
 		char time_string[BUFFSIZE];
 		
-                if(ncom.nDirs > 1) printf("%s:\n", dirs[i]);
+                if((ncom.nDirs > 1) || (ncom.nFiles > 0)) printf("%s:\n", dirs[i]);
 		
 		if(flag.HIDDEN_FILES){
         	        records = get_frecords(dirs[i], &maxlen, false, NULL, NULL);
@@ -784,8 +904,12 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 		}
 			
 		if(flag.PRINT_LONG && !flag.LONG_UID){
-			printf("Total %ld\n", maxlen.lTotal);
-        
+			if(flag.BYTE_SIZE){
+				printf("total %s\n", maxlen.total);
+			}else{
+				printf("total %ld\n", maxlen.lTotal);
+        		}
+			
 	        	for(long nentry = 0; nentry < num_entries; nentry++){
 				
 				int s1 = strcmp(records[nentry].name, ".");
@@ -814,7 +938,12 @@ void print_result(char *files[], char *dirs[], char *args, ncmd ncom){
 		}
 
 		if(flag.PRINT_LONG && flag.LONG_UID){
-                        printf("Total %ld\n", maxlen.lTotal);
+                        
+			if(flag.BYTE_SIZE){
+                                printf("total %s\n", maxlen.total);
+                        }else{
+                                printf("total %ld\n", maxlen.lTotal);
+                        }
         
 	                for(long nentry = 0; nentry < num_entries; nentry++){
                                 

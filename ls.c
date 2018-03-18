@@ -162,7 +162,7 @@ maxLen maxlength(frecord *records, long ent){
         int uid_max_len = 0;
         int gid_max_len = 0;
 	int byte_max_len = 0;
-	long inode_max_len;
+	long inode_max_len = 0;
         int nentry = 0;
 	long total = 0;
 	
@@ -759,7 +759,32 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
         maxLen maxlen, maxtmp;
 	long n;
 
-	
+	qsort(files, ncom.nFiles, sizeof(char **), cmp_dirs);
+
+
+        if((flag.SORT_TIME || flag.LAST_ACC || flag.LAST_CHANGE) && !flag.PRINT_LONG){
+                if(flag.LAST_MOD){
+                        qsort(files, ncom.nFiles, sizeof(char **), cmp_dir_mtime);
+                }else if(flag.LAST_ACC){
+                        qsort(files, ncom.nFiles, sizeof(char **), cmp_dir_atime);
+                }else if(flag.LAST_CHANGE){
+                        qsort(files, ncom.nFiles, sizeof(char **), cmp_dir_ctime);
+                }
+        }
+
+        if(flag.SORT_TIME && flag.PRINT_LONG){
+                if(flag.LAST_MOD){
+                        qsort(files, ncom.nFiles, sizeof(char **), cmp_dir_mtime);
+                }else if(flag.LAST_ACC){
+                        qsort(files, ncom.nFiles, sizeof(char **), cmp_dir_atime);
+                }else if(flag.LAST_CHANGE){
+                        qsort(files, ncom.nFiles, sizeof(char **), cmp_dir_ctime);
+                }
+        }
+
+        if(flag.REVERSE) reverse_dir(files, ncom.nFiles);
+
+
         if(ncom.nFiles != 0){
 		frecord *records, *rectmp;
                 maxLen maxlen, mltmp;
@@ -779,8 +804,6 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                         num_entries = maxlen.lEntries;
                 }
 
-
-                if(flag.SORT_ABC) qsort(records, num_entries, sizeof(frecord), cmp_str);
 
                 if(flag.SORT_TIME){
                         if(flag.LAST_MOD)       qsort(records, num_entries, sizeof(frecord), cmp_mtime);

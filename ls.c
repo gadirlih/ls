@@ -142,12 +142,15 @@ int main(int argc, char **argv){
 	ncmd ncom;
 	
 	ncom = parse_command(files, dirs, fd, args, argc, argv);
+
 	if(ncom.nFiles == 0 && ncom.nDirs == 0){
 		char def[1] = {'.'};
 		dirs[0] = def;
+		fd[0] = def;
 		ncom.nDirs = 1;
+		ncom.nFD = 1;
 	}
-
+	
 	setlocale(LC_ALL, "en_US.UTF-8");
 
 	print_result(files, dirs, fd, args, ncom);
@@ -316,10 +319,9 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 		
 		if(isFile){
 			if(lstat(files[f], &sbuff) < 0){
-                        	perror("lstat1 failed");
-                        	exit(1);
-			}
-			
+                                perror("lstat1 failed");
+                            	exit(1);
+	                }	
                 }else if(lstat(dentry->d_name, &sbuff) < 0){
 			perror("lstat2 failed");
 			exit(1);
@@ -806,7 +808,8 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
         maxLen maxlen, maxtmp;
 	long n;
 
-	qsort(files, ncom.nFiles, sizeof(char **), cmp_dirs);
+	if(flag.DIR_PLAIN)	qsort(fd, ncom.nFD, sizeof(char **), cmp_dirs);
+	else			qsort(files, ncom.nFiles, sizeof(char **), cmp_dirs);
 
 
         if((flag.SORT_TIME || flag.LAST_ACC || flag.LAST_CHANGE) && !flag.PRINT_LONG){
@@ -831,7 +834,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
 
 
 
-        if(ncom.nFiles != 0){
+        if(ncom.nFiles != 0 || flag.DIR_PLAIN){
 		frecord *records, *rectmp;
                 maxLen maxlen, mltmp;
                 int num_entries;

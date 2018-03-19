@@ -55,6 +55,7 @@ typedef struct{
 	long natime;
 	long inode;
 	char name[BUFFSIZE];
+	char fname[BUFFSIZE];
 	char nslname[BUFFSIZE];
 	long blocks;
 }frecord;
@@ -68,6 +69,7 @@ typedef struct{
 	int lSize;
 	int lByte;
 	int lName;
+	int lFname;
 	int lNslname;
 	int lEntries;
 	long lInode;
@@ -101,6 +103,7 @@ typedef struct{
 	bool INODE;
 	bool RECURSIVE;
 	bool DIR_PLAIN;
+	bool UPPER_F;
 }argFlags;
 
 frecord * get_frecords();
@@ -117,6 +120,7 @@ frecord *no_dot_records();
 maxLen maxlength();
 char * get_time_string();
 char * byte_size();
+char * get_fname();
 
 static const char *sizes[]   = { "E", "P", "T", "G", "M", "K", "" };
 static const long long exbibytes = 1024ULL * 1024ULL * 1024ULL *
@@ -127,7 +131,8 @@ argFlags flag ={.PRINT_SIMPLE = true, 	.PRINT_LONG = false, 	.HIDDEN_FILES = fal
 		.UPPER_A = false, 	.LAST_MOD = true, 	.LAST_ACC = false, 
 		.LAST_CHANGE = false, 	.SORT_TIME = false, 	.SORT_SIZE = false, 
 		.SORT_ABC_DIR = true, 	.REVERSE = false, 	.BYTE_SIZE = false, 
-		.INODE = false,		.RECURSIVE = false, 	.DIR_PLAIN = false};
+		.INODE = false,		.RECURSIVE = false, 	.DIR_PLAIN = false,
+		.UPPER_F = false};
 
 int main(int argc, char **argv){
 	char *files[BUFFSIZE];
@@ -162,6 +167,7 @@ maxLen maxlength(frecord *records, long ent){
         int uid_max_len = 0;
         int gid_max_len = 0;
 	int byte_max_len = 0;
+	//int fname_max_len = 0;
 	long inode_max_len = 0;
         int nentry = 0;
 	long total = 0;
@@ -217,6 +223,7 @@ maxLen maxlength(frecord *records, long ent){
 	max_length.lByte = byte_max_len;
 	strcpy(max_length.total, byte_size(total * 1024));
 	max_length.lInode = inode_max_len;
+	//max_length.lFname = fname_max_len;
 
 	return max_length;
 }
@@ -288,6 +295,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	int uid_max_len = 0;
 	int gid_max_len = 0;
 	int byte_max_len = 0;
+	int fname_max_len= 0;
 	long inode_max_len = 0;
 	nentry = 0;
 
@@ -349,9 +357,15 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 		if(!isFile){
 			strcpy(records[nentry].name, dentry->d_name);
 			strcpy(records[nentry].nslname, dentry->d_name);
+			if(flag.UPPER_F) strcpy(records[nentry].nslname, 
+						get_fname(dentry->d_name, sbuff.st_mode));
+			if(flag.UPPER_F) strcpy(records[nentry].name,
+                                                get_fname(dentry->d_name, sbuff.st_mode));
 		}else{
 			strcpy(records[nentry].name, files[f]);
 			strcpy(records[nentry].nslname, files[f]);
+			if(flag.UPPER_F) strcpy(records[nentry].name, get_fname(files[f], sbuff.st_mode));
+			if(flag.UPPER_F) strcpy(records[nentry].nslname, get_fname(files[f], sbuff.st_mode));
 		}
 		records[nentry].uid = sbuff.st_uid;
 		records[nentry].gid = sbuff.st_gid;
@@ -366,7 +380,13 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 			}	
 
                         slinkbuff[n] = '\0';
-			strcat(records[nentry].name, " -> ");
+			
+			if(flag.UPPER_F){
+				strcpy(records[nentry].name + 
+						(strlen(records[nentry].name) - 1), " -> ");
+			}else{
+				strcat(records[nentry].name, " -> ");
+			}
                         strcat(records[nentry].name, slinkbuff);
                 }
 		int name_length = strlen(records[nentry].name);
@@ -431,9 +451,36 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 	max_length->lByte = byte_max_len;
 	strcpy(max_length->total, byte_size(lTotal * 1024));
 	max_length->lInode = inode_max_len;
+	//max_length->lFname = fname_max_len;
 	
 	return records;
 }
+
+char * get_fname(char * name, mode_t mode){
+	char *fname;
+	fname = malloc(sizeof(char) * BUFFSIZE);
+	int len = strlen(name);
+	strcpy(fname, name);
+	
+	if(S_ISDIR(mode)){
+		strcat(fname, "/");
+	}else if(S_ISLNK(mode)){
+		strcat(fname, "@");
+	}else if((mode & S_IXUSR) || (mode & S_IXGRP) || (mode & S_IXOTH)){
+		strcat(fname, "*");
+	}else if(S_ISSOCK(mode)){
+		strcat(fname, "=");
+	}else if(S_ISFIFO(mode)){
+		strcat(fname, "|");
+	}else if(S_ISREG(mode)){
+	}else if(S_ISCHR(mode)){
+	}else if(S_ISBLK(mode)){
+	}else{
+		strcat(fname, "%");
+	}
+	return fname;	
+}
+
 char * get_time_string(char *asctime){
 	char *t;
 	int year;
@@ -782,7 +829,6 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                 }
         }
 
-        if(flag.REVERSE) reverse_dir(files, ncom.nFiles);
 
 
         if(ncom.nFiles != 0){
@@ -794,13 +840,8 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
 		if(flag.DIR_PLAIN){
                         records = get_frecords(NULL, &maxlen, true, fd, &ncom);
                         num_entries = maxlen.lEntries;
-                }else if(flag.HIDDEN_FILES){
-                        records = get_frecords(NULL, &maxlen, true, files, &ncom);
-                        num_entries = maxlen.lEntries;
                 }else{
-                        rectmp = get_frecords(NULL, &mltmp, true, files, &ncom);
-
-                        records = no_dot_records(rectmp, mltmp.lEntries, &maxlen);
+                        records = get_frecords(NULL, &maxlen, true, files, &ncom);
                         num_entries = maxlen.lEntries;
                 }
 
@@ -1187,6 +1228,9 @@ void parse_arguments(char *args, ncmd ncom){
 				break;
 			case 'R' :
 				if(!disable_R) flag.RECURSIVE = true;
+				break;
+			case 'F' :
+				flag.UPPER_F = true;
 				break;
 			default : 
 				printf("WRONG ARGUMENT\n");

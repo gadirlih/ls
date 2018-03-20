@@ -420,6 +420,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
     int byte_max_len = 0;
     int fname_max_len= 0;
     long inode_max_len = 0;
+    bool isDir = !isFile;
     nentry = 0;
 
     if(!isFile)
@@ -610,7 +611,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
     max_length->lInode = inode_max_len;
     //max_length->lFname = fname_max_len;
     if(!flag.RECURSIVE) chdir("..");
-    closedir(dp);
+    if(isDir) closedir(dp);
     return records;
 }
 

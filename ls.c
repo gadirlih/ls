@@ -1687,7 +1687,7 @@ void parse_arguments(char *args, ncmd ncom)
             flag.SORT_TIME = false;
             break;
         case 'r' :
-            if(!disable_R) flag.REVERSE = true;
+            if(!disable_r) flag.REVERSE = true;
             break;
         case 'h' :
             flag.BYTE_SIZE = true;

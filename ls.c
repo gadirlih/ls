@@ -149,14 +149,14 @@ static const long long exbibytes = 1024ULL * 1024ULL * 1024ULL *
                                    1024ULL * 1024ULL * 1024ULL;
 
 static argFlags flag = {.PRINT_SIMPLE = true, 	.PRINT_LONG = false, 	.HIDDEN_FILES = false,
-                 .SORT_ABC = true, 	.LONG_UID = false, 	.NAME_SLINK = false,
-                 .UPPER_A = false, 	.LAST_MOD = true, 	.LAST_ACC = false,
-                 .LAST_CHANGE = false, 	.SORT_TIME = false, 	.SORT_SIZE = false,
-                 .SORT_ABC_DIR = true, 	.REVERSE = false, 	.BYTE_SIZE = false,
-                 .INODE = false,		.RECURSIVE = false, 	.DIR_PLAIN = false,
-                 .UPPER_F = false,
-                 .COLOR_STRING = true
-                };
+                        .SORT_ABC = true, 	.LONG_UID = false, 	.NAME_SLINK = false,
+                        .UPPER_A = false, 	.LAST_MOD = true, 	.LAST_ACC = false,
+                        .LAST_CHANGE = false, 	.SORT_TIME = false, 	.SORT_SIZE = false,
+                        .SORT_ABC_DIR = true, 	.REVERSE = false, 	.BYTE_SIZE = false,
+                        .INODE = false,		.RECURSIVE = false, 	.DIR_PLAIN = false,
+                        .UPPER_F = false,
+                        .COLOR_STRING = true
+                       };
 ncmd recur_com;
 static char *files[BUFFSIZE];
 static char *dirs[BUFFSIZE];
@@ -184,7 +184,7 @@ int main(int argc, char **argv)
         dirs[0] = malloc(sizeof(char) * BUFFSIZE);
         strcpy(dirs[0], ".");
         fd[0] = malloc(sizeof(char) * BUFFSIZE);
-        strcpy(dirs[0], ".");
+        strcpy(fd[0], ".");
         ncom.nDirs = 1;
         ncom.nFD = 1;
     }
@@ -194,9 +194,10 @@ int main(int argc, char **argv)
     int d = ncom.nDirs;
     if(flag.RECURSIVE)
     {
+        rdirs_count = 0;
+
         for(int i = 0; i < d; i++)
         {
-            rdirs_count = 0;
             chdir(gcwd);
             if(print_recursive(dirs[i]))
             {
@@ -399,12 +400,12 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 
     if(!isFile)
     {
-        records = malloc(nentry * sizeof(frecord)); 	//allocate memory for records
+        records = malloc(nentry * sizeof(frecord) * 3); 	//allocate memory for records
     }
     else
     {
-        if(flag.DIR_PLAIN)	records = malloc((ncom->nFD) * sizeof(frecord));
-        else 			records = malloc((ncom->nFiles) * sizeof(frecord));
+        if(flag.DIR_PLAIN)	records = malloc((ncom->nFD) * sizeof(frecord) * 3);
+        else 			records = malloc((ncom->nFiles) * sizeof(frecord) * 10);
     }
 
     int max = 0;
@@ -659,14 +660,16 @@ char * get_time_string(char *asctime)
 {
     char *t;
     int year;
-    t = malloc(sizeof(char *) * BUFFSIZE);
+    t = malloc(sizeof(char) * BUFFSIZE);
 
 
     year = strtol(asctime + 20, 0, 10);
 
     time_t cur = time(NULL);
-    struct tm *curt = localtime(&cur);
+    struct tm *curt = malloc(sizeof(struct tm) * 100);
+    curt = localtime(&cur);
 
+    memset(t, '\0', BUFFSIZE);
     if(year == curt->tm_year + 1900)
     {
         strncpy(t, asctime + 4, 12);
@@ -1005,6 +1008,7 @@ void reverse_dir(char *dirs[], long ent)
 char * byte_size(long long size)
 {
     char * result = (char *) malloc(sizeof(char) * 20);
+    char * result2 = (char *) malloc(sizeof(char) * 20);
     long long multiplier = exbibytes;
 
     for (int i = 0; i < sizeof(sizes)/sizeof(*(sizes)); i++, multiplier /= 1024)
@@ -1020,6 +1024,14 @@ char * byte_size(long long size)
         {
             sprintf(result, "%.1Lf%s", (long double) size / multiplier + 0.05, sizes[i]);
         }
+        if(strlen(result) > 4)
+        {
+            long long res = strtol(result, 0, 10);
+            if(result[strlen(result) - 2] != '0')res++;
+            sprintf(result2, "%lld%s",res, result+strlen(result) - 1);
+            return result2;
+        }
+
         return result;
     }
     strcpy(result, "0");
@@ -1060,59 +1072,73 @@ char * color_string(char *str, mode_t mode)
         chdir(gcwd);
         if (S_ISDIR(mode))
         {
-	    if(flag.UPPER_F){
-		strcpy(cstr, BOLDBLUE);
-           	strncat(cstr, str, strlen(str) - 1);
-            	strcat(cstr, RESET);
-		strcat(cstr, "/");
-		}else{
-            		strcpy(cstr, BOLDBLUE);
-            		strcat(cstr, str);
-            		strcat(cstr, RESET);
-		}
+            if(flag.UPPER_F)
+            {
+                strcpy(cstr, BOLDBLUE);
+                strncat(cstr, str, strlen(str) - 1);
+                strcat(cstr, RESET);
+                strcat(cstr, "/");
+            }
+            else
+            {
+                strcpy(cstr, BOLDBLUE);
+                strcat(cstr, str);
+                strcat(cstr, RESET);
+            }
         }
-	else if (S_ISLNK(mode))
+        else if (S_ISLNK(mode))
         {
-                if(flag.UPPER_F){
-                        strcpy(cstr, BOLDCYAN);
+            if(flag.UPPER_F && !flag.PRINT_LONG)
+            {
+                strcpy(cstr, BOLDCYAN);
                 strncat(cstr, str, strlen(str) - 1);
                 strcat(cstr, RESET);
                 strcat(cstr, "@");
-                }else{
-            strcpy(cstr, BOLDCYAN);
-            strcat(cstr, str);
-            strcat(cstr, RESET);
-                }
+            }
+            else
+            {
+                strcpy(cstr, BOLDCYAN);
+                strcat(cstr, str);
+                strcat(cstr, RESET);
+            }
         }
         else if((mode & S_IXUSR) || (mode & S_IXGRP) || (mode & S_IXOTH))
         {
-		if(flag.UPPER_F){
-			strcpy(cstr, BOLDGREEN);
-                	strncat(cstr, str, strlen(str) - 1);
-        	        strcat(cstr, RESET);
-	                strcat(cstr, "*");
-		}else{
-            strcpy(cstr, BOLDGREEN);
-            strcat(cstr, str);
-            strcat(cstr, RESET);
-		}
+            if(flag.UPPER_F)
+            {
+                strcpy(cstr, BOLDGREEN);
+                strncat(cstr, str, strlen(str) - 1);
+                strcat(cstr, RESET);
+                strcat(cstr, "*");
+            }
+            else
+            {
+                strcpy(cstr, BOLDGREEN);
+                strcat(cstr, str);
+                strcat(cstr, RESET);
+            }
         }
         else if (S_ISSOCK(mode))
-        {	
-		if(flag.UPPER_F){
-			strcpy(cstr, BOLDBLUE);
+        {
+            if(flag.UPPER_F)
+            {
+                strcpy(cstr, BOLDBLUE);
                 strncat(cstr, str, strlen(str) - 1);
                 strcat(cstr, RESET);
                 strcat(cstr, "=");
-		}else{
+            }
+            else
+            {
 
-            strcpy(cstr, BOLDMAGENTA);
-            strcat(cstr, str);
-            strcat(cstr, RESET);
-		}
-        }else{
-		strcpy(cstr, str);
-	}
+                strcpy(cstr, BOLDMAGENTA);
+                strcat(cstr, str);
+                strcat(cstr, RESET);
+            }
+        }
+        else
+        {
+            strcpy(cstr, str);
+        }
         return cstr;
     }
     else
@@ -1389,16 +1415,16 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
 
             //(!flag.RECURSIVE)
 
-                if(*dirs[i] == '/')
-                {
-                    chdir("/");
-                    memset(rpath, '\0', BUFFSIZE);
-                }
-                else
-                {
-                    memset(rpath, '\0', BUFFSIZE);
-                    strcpy(rpath, gcwd);
-                }
+            if(*dirs[i] == '/')
+            {
+                chdir("/");
+                memset(rpath, '\0', BUFFSIZE);
+            }
+            else
+            {
+                memset(rpath, '\0', BUFFSIZE);
+                strcpy(rpath, gcwd);
+            }
 
 
 
@@ -1631,7 +1657,7 @@ void parse_arguments(char *args, ncmd ncom)
             flag.UPPER_A = false;
             flag.SORT_TIME = false;
             flag.SORT_SIZE = false;
-	    flag.COLOR_STRING = false;
+            flag.COLOR_STRING = false;
             disable_A = true;
             break;
         case 'u' :

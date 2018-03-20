@@ -123,6 +123,7 @@ typedef struct
     bool DIR_PLAIN;
     bool UPPER_F;
     bool COLOR_STRING;
+    bool SORT_DISABLE;
 } argFlags;
 
 frecord * get_frecords();
@@ -154,7 +155,7 @@ static argFlags flag = {.PRINT_SIMPLE = true, 	.PRINT_LONG = false, 	.HIDDEN_FIL
                         .LAST_CHANGE = false, 	.SORT_TIME = false, 	.SORT_SIZE = false,
                         .SORT_ABC_DIR = true, 	.REVERSE = false, 	.BYTE_SIZE = false,
                         .INODE = false,		.RECURSIVE = false, 	.DIR_PLAIN = false,
-                        .UPPER_F = false,
+                        .UPPER_F = false,	.SORT_DISABLE = false,
                         .COLOR_STRING = true
                        };
 ncmd recur_com;
@@ -1158,11 +1159,11 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
     maxLen maxlen, maxtmp;
     long n;
 
-    if(flag.DIR_PLAIN)	qsort(fd, ncom.nFD, sizeof(char **), cmp_dirs);
-    else			qsort(files, ncom.nFiles, sizeof(char **), cmp_dirs);
+    if(flag.DIR_PLAIN && !flag.SORT_DISABLE)	qsort(fd, ncom.nFD, sizeof(char **), cmp_dirs);
+    else if(!flag.SORT_DISABLE)			qsort(files, ncom.nFiles, sizeof(char **), cmp_dirs);
 
 
-    if((flag.SORT_TIME || flag.LAST_ACC || flag.LAST_CHANGE) && !flag.PRINT_LONG)
+    if((flag.SORT_TIME || flag.LAST_ACC || flag.LAST_CHANGE) && !flag.PRINT_LONG && !flag.SORT_DISABLE)
     {
         if(flag.LAST_MOD)
         {
@@ -1178,7 +1179,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
         }
     }
 
-    if(flag.SORT_TIME && flag.PRINT_LONG)
+    if(flag.SORT_TIME && flag.PRINT_LONG && !flag.SORT_DISABLE)
     {
         if(flag.LAST_MOD)
         {
@@ -1367,10 +1368,10 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
 
     if(!flag.DIR_PLAIN)
     {
-        qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dirs);
+        if(!flag.SORT_DISABLE)	qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dirs);
 
 
-        if((flag.SORT_TIME || flag.LAST_ACC || flag.LAST_CHANGE) && !flag.PRINT_LONG)
+        if((flag.SORT_TIME || flag.LAST_ACC || flag.LAST_CHANGE) && !flag.PRINT_LONG && !flag.SORT_DISABLE)
         {
             if(flag.LAST_MOD)
             {
@@ -1386,7 +1387,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
             }
         }
 
-        if(flag.SORT_TIME && flag.PRINT_LONG)
+        if(flag.SORT_TIME && flag.PRINT_LONG && !flag.SORT_DISABLE)
         {
             if(flag.LAST_MOD)
             {
@@ -1619,6 +1620,7 @@ void parse_arguments(char *args, ncmd ncom)
     bool disable_A = false;
     bool disable_R = false;
     bool disable_L = false;
+    bool disable_r = false;
 
     while(a < ncom.nArgs)
     {
@@ -1658,7 +1660,10 @@ void parse_arguments(char *args, ncmd ncom)
             flag.SORT_TIME = false;
             flag.SORT_SIZE = false;
             flag.COLOR_STRING = false;
+	    flag.REVERSE = false;
+	    flag.SORT_DISABLE = true;
             disable_A = true;
+	    disable_r = true;
             break;
         case 'u' :
             flag.LAST_ACC = true;
@@ -1681,7 +1686,7 @@ void parse_arguments(char *args, ncmd ncom)
             flag.SORT_TIME = false;
             break;
         case 'r' :
-            flag.REVERSE = true;
+            if(!disable_R) flag.REVERSE = true;
             break;
         case 'h' :
             flag.BYTE_SIZE = true;

@@ -843,6 +843,33 @@ int cmp_size(const void *a, const void *b)
     return (res != 0)?-res:(strcoll(l->name, r->name));
 }
 
+int cmp_dir_size(const void *a, const void *b)
+{
+    char *tmpl, *tmpr;
+    
+    char **l = (char **)a;
+    char **r = (char **)b;
+
+    struct stat *sbuffl;
+    sbuffl = malloc(sizeof(struct stat));
+    if(lstat(*l, sbuffl) < 0)
+    {
+        perror("lstat in cmp_dir_atime failed");
+        exit(1);
+    }
+    
+    struct stat *sbuffr;
+    sbuffr = malloc(sizeof(struct stat));
+    if(lstat(*r, sbuffr) < 0)
+    {
+        perror("lstat in cmp_dri_atime failed");
+        exit(1);
+    }
+
+    long res = sbuffl->st_size - sbuffr->st_size;
+    return (res != 0)?-res:(strcoll(*l, *r));
+
+} 
 
 int cmp_dir_atime(const void *a, const void *b)
 {
@@ -1403,6 +1430,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                 qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dir_ctime);
             }
         }
+	if(flag.SORT_SIZE) qsort(dirs, ncom.nDirs, sizeof(char **), cmp_dir_size);
 
         if(flag.REVERSE) reverse_dir(dirs, ncom.nDirs);
 

@@ -19,7 +19,7 @@
 #include <errno.h>
 
 
-#define NELEMS(x) sizeof(x)/sizeof((x)[0])
+
 #define RED     "\x1b[31m"
 #define GREEN   "\x1b[32m"
 #define YELLOW  "\x1b[33m"
@@ -27,6 +27,14 @@
 #define MAGENTA "\x1b[35m"
 #define CYAN    "\x1b[36m"
 #define RESET   "\x1b[0m"
+#define BOLDRED     "\033[1m\033[31m"
+#define BOLDGREEN   "\033[1m\033[32m"
+#define BOLDYELLOW  "\033[1m\033[33m"
+#define BOLDBLUE    "\033[1m\033[34m"
+#define BOLDMAGENTA "\033[1m\033[35m"
+#define BOLDCYAN    "\033[1m\033[36m"
+#define BOLDWHITE   "\033[1m\033[37m"
+
 
 #ifndef BUFFSIZE
 #define BUFFSIZE 4096
@@ -43,6 +51,7 @@ typedef struct
 {
     long nentry;
     char mode[10];
+    mode_t mmode;
     nlink_t nlinks;
     char username[BUFFSIZE];
     char groupname[BUFFSIZE];
@@ -113,6 +122,7 @@ typedef struct
     bool RECURSIVE;
     bool DIR_PLAIN;
     bool UPPER_F;
+    bool COLOR_STRING;
 } argFlags;
 
 frecord * get_frecords();
@@ -123,7 +133,7 @@ int nDigits(long the_integer);
 void print_default(frecord *records,  maxLen *max_length);
 void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom);
 int print_recursive();
-ncmd parse_command(char *files[], char *dirs[], char *fd[], char *args, int argc, char **argv);
+ncmd parse_command();
 void parse_arguments();
 void get_arguments();
 frecord *no_dot_records();
@@ -131,92 +141,74 @@ maxLen maxlength();
 char * get_time_string();
 char * byte_size();
 char * get_fname();
-int print_entry();
+int  print_entry();
+char * color_string();
 
 static const char *sizes[]   = { "E", "P", "T", "G", "M", "K", "" };
 static const long long exbibytes = 1024ULL * 1024ULL * 1024ULL *
                                    1024ULL * 1024ULL * 1024ULL;
 
-argFlags flag = {.PRINT_SIMPLE = true, 	.PRINT_LONG = false, 	.HIDDEN_FILES = false,
+static argFlags flag = {.PRINT_SIMPLE = true, 	.PRINT_LONG = false, 	.HIDDEN_FILES = false,
                  .SORT_ABC = true, 	.LONG_UID = false, 	.NAME_SLINK = false,
                  .UPPER_A = false, 	.LAST_MOD = true, 	.LAST_ACC = false,
                  .LAST_CHANGE = false, 	.SORT_TIME = false, 	.SORT_SIZE = false,
                  .SORT_ABC_DIR = true, 	.REVERSE = false, 	.BYTE_SIZE = false,
                  .INODE = false,		.RECURSIVE = false, 	.DIR_PLAIN = false,
-                 .UPPER_F = false
+                 .UPPER_F = false,
+                 .COLOR_STRING = true
                 };
 ncmd recur_com;
-char *files[BUFFSIZE];
-char *dirs[BUFFSIZE];
-char *recursive_dir[BUFFSIZE];
-char *fd[BUFFSIZE];
-char args[BUFFSIZE];
-char rpath[BUFFSIZE];
-char gcwd[BUFFSIZE];
+static char *files[BUFFSIZE];
+static char *dirs[BUFFSIZE];
+static char *rdirs[100000000];
+static char *recursive_dir[BUFFSIZE];
+static char *fd[BUFFSIZE];
+static char args[BUFFSIZE];
+static char rpath[BUFFSIZE];
+static char gcwd[BUFFSIZE];
 char comp[BUFFSIZE];
-bool FIRST_RECURSIVE_ENTRY = true;
+static long long rdirs_count = 0;
+static ncmd ncom;
 
 
 int main(int argc, char **argv)
 {
 
-    ncmd ncom;
 
-    ncom = parse_command(files, dirs, fd, args, argc, argv);
+    ncom = parse_command(argc, argv);
 
     getcwd(gcwd, BUFFSIZE);
 
     if(ncom.nFiles == 0 && ncom.nDirs == 0)
     {
-        char def[1] = {'.'};
-        dirs[0] = def;
-        fd[0] = def;
+        dirs[0] = malloc(sizeof(char) * BUFFSIZE);
+        strcpy(dirs[0], ".");
+        fd[0] = malloc(sizeof(char) * BUFFSIZE);
+        strcpy(dirs[0], ".");
         ncom.nDirs = 1;
         ncom.nFD = 1;
     }
     parse_arguments(args, ncom);
     setlocale(LC_ALL, "en_US.UTF-8");
 
+    int d = ncom.nDirs;
     if(flag.RECURSIVE)
     {
-        recur_com = parse_command(files, dirs, fd, args, argc, argv);
-        recur_com.nFiles = 0;
-        recur_com.nDirs = 1;
-        recur_com.nFD = 0;
-        char temp[BUFFSIZE];
-        recursive_dir[0] = malloc(sizeof(char) * BUFFSIZE);
-
-
-        for (int i = 0; i < ncom.nDirs; i++)
+        for(int i = 0; i < d; i++)
         {
-            memset(temp, '\0', BUFFSIZE);
-            if(i > 0 )
-            {
-                recursive_dir[0] = NULL;
-                malloc(sizeof(char) * BUFFSIZE);
-            }
-            recursive_dir[0] = dirs[i];
-            strcpy(temp, recursive_dir[0]);
-            if(temp[0] == '/')
-            {
-                chdir("/");
-                memset(rpath, '\0', BUFFSIZE);
-            }
-            else
-            {
-                chdir(gcwd);
-                strcpy(rpath, gcwd);
-            }
-            //chdir(recursive_dir[0]);
-            //getcwd(rpath, BUFFSIZE);
-            if (print_recursive(dirs[i]))
+            rdirs_count = 0;
+            chdir(gcwd);
+            if(print_recursive(dirs[i]))
             {
                 perror("Recursive error");
-                return EXIT_FAILURE;
+                exit(1);
             }
+            //ncom.nDirs = rdirs_count;
+            //print_result(files, rdirs, fd, args, ncom);
         }
+        ncom.nDirs = rdirs_count;
+        print_result(files, rdirs, fd, args, ncom);
 
-        //print_recursive(files, dirs, fd, args, ncom);
     }
     else
     {
@@ -316,7 +308,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
 {
     long nentry = 0;
     frecord *records;
-
+    //path = malloc(sizeof(char) * BUFFSIZE);
     int fd;
     struct tm smtime, sctime, satime;
     long mtime, ctime, atime;
@@ -487,6 +479,7 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
         char *username = get_username(sbuff.st_uid);
         strcpy(records[nentry].username, username);
         char *mode = parse_mode(sbuff.st_mode);
+        records[nentry].mmode = sbuff.st_mode;
         strcpy(records[nentry].mode, mode);
         char *groupname = get_groupname(sbuff.st_gid);
         strcpy(records[nentry].groupname, groupname);
@@ -514,12 +507,12 @@ frecord * get_frecords(char *path, maxLen *max_length, bool isFile, char *files[
             if(!isFile && ((n = readlink(dentry->d_name, slinkbuff, BUFFSIZE)) < 0))
             {
                 perror("readlink1 failed");
-                exit(1);
+                //exit(1);
             }
             else if(isFile && ((n = readlink(files[f], slinkbuff, BUFFSIZE)) < 0))
             {
                 perror("readlink2 failed");
-                exit(1);
+                //exit(1);
             }
 
             slinkbuff[n] = '\0';
@@ -689,7 +682,7 @@ char * get_time_string(char *asctime)
 }
 
 
-ncmd parse_command(char *files[], char *dirs[], char *fd[], char *args, int argc, char **argv)
+ncmd parse_command(int argc, char **argv)
 {
     DIR *dp;
     ncmd ncom;
@@ -1049,23 +1042,85 @@ int print_entry(const char *filepath, const struct stat *info,
                 const int typeflag, struct FTW *pathinfo)
 {
 
-    recursive_dir[0] = filepath;
     if(typeflag == FTW_D)
     {
-	if(!FIRST_RECURSIVE_ENTRY)
-	{
-		printf("\n");
-	}
-	else
-	{
-		FIRST_RECURSIVE_ENTRY = false;
-	}
-        print_result(files, recursive_dir, fd, args, recur_com);
+        rdirs[rdirs_count] = malloc(sizeof(char) * strlen(filepath) * 10);
+        strcpy(rdirs[rdirs_count], filepath);
+        rdirs_count++;
     }
     return 0;
 }
 
+char * color_string(char *str, mode_t mode)
+{
+    char *cstr;
+    cstr = malloc(sizeof(char) * BUFFSIZE);
+    if(flag.COLOR_STRING)
+    {
+        chdir(gcwd);
+        if (S_ISDIR(mode))
+        {
+	    if(flag.UPPER_F){
+		strcpy(cstr, BOLDBLUE);
+           	strncat(cstr, str, strlen(str) - 1);
+            	strcat(cstr, RESET);
+		strcat(cstr, "/");
+		}else{
+            		strcpy(cstr, BOLDBLUE);
+            		strcat(cstr, str);
+            		strcat(cstr, RESET);
+		}
+        }
+	else if (S_ISLNK(mode))
+        {
+                if(flag.UPPER_F){
+                        strcpy(cstr, BOLDCYAN);
+                strncat(cstr, str, strlen(str) - 1);
+                strcat(cstr, RESET);
+                strcat(cstr, "@");
+                }else{
+            strcpy(cstr, BOLDCYAN);
+            strcat(cstr, str);
+            strcat(cstr, RESET);
+                }
+        }
+        else if((mode & S_IXUSR) || (mode & S_IXGRP) || (mode & S_IXOTH))
+        {
+		if(flag.UPPER_F){
+			strcpy(cstr, BOLDGREEN);
+                	strncat(cstr, str, strlen(str) - 1);
+        	        strcat(cstr, RESET);
+	                strcat(cstr, "*");
+		}else{
+            strcpy(cstr, BOLDGREEN);
+            strcat(cstr, str);
+            strcat(cstr, RESET);
+		}
+        }
+        else if (S_ISSOCK(mode))
+        {	
+		if(flag.UPPER_F){
+			strcpy(cstr, BOLDBLUE);
+                strncat(cstr, str, strlen(str) - 1);
+                strcat(cstr, RESET);
+                strcat(cstr, "=");
+		}else{
 
+            strcpy(cstr, BOLDMAGENTA);
+            strcat(cstr, str);
+            strcat(cstr, RESET);
+		}
+        }else{
+		strcpy(cstr, str);
+	}
+        return cstr;
+    }
+    else
+    {
+        strcpy(cstr, str);
+        return cstr;
+    }
+}
 
 void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom)
 {
@@ -1183,7 +1238,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                            records[nentry].groupname,
                            (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
                            (flag.BYTE_SIZE)?records[nentry].byte:size,
-                           time_string, records[nentry].name);
+                           time_string, color_string(records[nentry].name, records[nentry].mmode));
                 }
                 else
                 {
@@ -1194,7 +1249,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                            records[nentry].groupname,
                            (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
                            (flag.BYTE_SIZE)?records[nentry].byte:size,
-                           time_string, records[nentry].name);
+                           time_string, color_string(records[nentry].name, records[nentry].mmode));
                 }
             }
             if(ncom.nDirs != 0 && !flag.DIR_PLAIN) printf("\n");
@@ -1235,7 +1290,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                            maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid,
                            (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
                            (flag.BYTE_SIZE)?records[nentry].byte:size,
-                           time_string, records[nentry].name);
+                           time_string, color_string(records[nentry].name, records[nentry].mmode));
                 }
                 else
                 {
@@ -1245,7 +1300,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                            maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid,
                            (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
                            (flag.BYTE_SIZE)?records[nentry].byte:size,
-                           time_string, records[nentry].name);
+                           time_string, color_string(records[nentry].name, records[nentry].mmode));
                 }
             }
             if(ncom.nDirs != 0 && !flag.DIR_PLAIN) printf("\n");
@@ -1332,8 +1387,8 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
 
             //if(!flag.RECURSIVE && i > 0) chdir("..");
 
-            if(!flag.RECURSIVE)
-            {
+            //(!flag.RECURSIVE)
+
                 if(*dirs[i] == '/')
                 {
                     chdir("/");
@@ -1344,7 +1399,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                     memset(rpath, '\0', BUFFSIZE);
                     strcpy(rpath, gcwd);
                 }
-            }
+
 
 
             if((ncom.nDirs > 1) || (ncom.nFiles > 0) || flag.RECURSIVE) printf("%s:\n", dirs[i]);
@@ -1421,7 +1476,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                                maxlen.lUsername, records[nentry].username, maxlen.lGroupname,
                                records[nentry].groupname, (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
                                (flag.BYTE_SIZE)?records[nentry].byte:size,
-                               time_string, records[nentry].name);
+                               time_string, color_string(records[nentry].name, records[nentry].mmode));
                     }
                     else
                     {
@@ -1430,7 +1485,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                                maxlen.lUsername, records[nentry].username, maxlen.lGroupname,
                                records[nentry].groupname, (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
                                (flag.BYTE_SIZE)?records[nentry].byte:size,
-                               time_string, records[nentry].name);
+                               time_string, color_string(records[nentry].name, records[nentry].mmode));
                     }
                 }
                 if(i + 1 != ncom.nDirs) printf("\n");
@@ -1480,7 +1535,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                                maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid,
                                (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
                                (flag.BYTE_SIZE)?records[nentry].byte:size,
-                               time_string, records[nentry].name);
+                               time_string, color_string(records[nentry].name, records[nentry].mmode));
                     }
                     else
                     {
@@ -1489,7 +1544,7 @@ void print_result(char *files[], char *dirs[], char *fd[], char *args, ncmd ncom
                                maxlen.lUid, records[nentry].uid, maxlen.lGid, records[nentry].gid,
                                (flag.BYTE_SIZE)?maxlen.lByte:maxlen.lSize,
                                (flag.BYTE_SIZE)?records[nentry].byte:size,
-                               time_string, records[nentry].name);
+                               time_string, color_string(records[nentry].name, records[nentry].mmode));
                     }
                 }
                 if(i + 1 != ncom.nDirs) printf("\n");
@@ -1576,6 +1631,7 @@ void parse_arguments(char *args, ncmd ncom)
             flag.UPPER_A = false;
             flag.SORT_TIME = false;
             flag.SORT_SIZE = false;
+	    flag.COLOR_STRING = false;
             disable_A = true;
             break;
         case 'u' :
@@ -1664,8 +1720,8 @@ void print_default(frecord *records, maxLen *maxlen)
             if(flag.INODE)	printf("%*d %s",
                                        maxlen->lInode,
                                        records[index].inode,
-                                       records[index].nslname);
-            else		printf("%s", records[index].nslname);
+                                       color_string(records[index].nslname, records[index].mmode));
+            else		printf("%s", color_string(records[index].nslname, records[index].mmode));
             while(tabs_needed--) putchar('\t');
         }
         putchar('\n');
